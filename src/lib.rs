@@ -17,13 +17,13 @@ Run `cargo doc` in the main directory to create the documentation.
 The generated HTML documentation can be accessed via
 [target/doc/asdf/index.html](index.html).
 
-# Creating the C API
+# Building the C API
 
 Using [cargo-c](https://github.com/lu-zero/cargo-c)
 (`cargo install cargo-c`):
 
 ```text
-cargo cbuild
+cargo cbuild --release
 cargo cinstall --release
 ```
 
