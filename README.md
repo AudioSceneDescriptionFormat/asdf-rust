@@ -24,7 +24,7 @@ Using [cargo-c](https://github.com/lu-zero/cargo-c)
 (`cargo install cargo-c`):
 
 ```
-cargo cbuild --release
+cargo cbuild
 cargo cinstall --release
 ```
 
