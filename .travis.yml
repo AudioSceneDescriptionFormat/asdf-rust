@@ -7,12 +7,14 @@ cache: cargo
 before_script:
   - rustup component add rustfmt
   - rustup component add clippy
-  - cargo install cargo-c --force
+  - cargo install cargo-c cargo-readme --force
 
 script:
   - cargo build --verbose --all
   - cargo test --verbose --all
   - cargo cbuild --release
+  - cargo readme -o README.md
+  - test -z "$(git diff README.md)"
   - cargo doc --verbose --all
   - cargo fmt --all -- --check
   - cargo clippy --all-targets --all-features -- -D warnings
