@@ -1,0 +1,3 @@
+[submodule "asdfspline"]
+	path = asdfspline
+	url = https://github.com/AudioSceneDescriptionFormat/asdfspline-rust.git
