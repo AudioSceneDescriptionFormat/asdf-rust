@@ -15,7 +15,7 @@ use crate::{Scene, Transform};
 #[derive(Default)]
 pub struct AsdfTransform {
     flags: u8,
-    pos: [f32; 3],
+    pos: [f64; 3],
 }
 
 pub const ASDF_TRANSFORM_ACTIVE: u8 = 1;
