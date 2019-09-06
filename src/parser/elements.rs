@@ -165,10 +165,10 @@ impl<'a> Element<'a> for AsdfElement {
         scene.streamer = Some(FileStreamer::new(
             self.seq.files,
             scene.file_storage.split_off(0),
-            scene.samplerate,
             scene.blocksize,
             scene.sources.len() as u32,
-            scene.buffer_duration,
+            scene.buffer_blocks,
+            scene.sleeptime,
         ));
         Ok(())
     }

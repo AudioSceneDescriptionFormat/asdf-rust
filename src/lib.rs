@@ -40,6 +40,7 @@ cargo readme -o README.md
 */
 use std::collections::HashMap;
 use std::path::Path;
+use std::time::Duration;
 
 #[macro_use]
 extern crate lazy_static;
@@ -74,9 +75,16 @@ impl Scene {
         path: P,
         samplerate: u32,
         blocksize: u32,
-        buffer_duration: f32,
+        buffer_blocks: u32,
+        sleeptime: Duration,
     ) -> Result<Scene, LoadError> {
-        parser::load_scene(path.as_ref(), samplerate, blocksize, buffer_duration)
+        parser::load_scene(
+            path.as_ref(),
+            samplerate,
+            blocksize,
+            buffer_blocks,
+            sleeptime,
+        )
     }
 
     pub fn file_sources(&self) -> u32 {

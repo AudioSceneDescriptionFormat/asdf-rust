@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::fmt::Display;
 use std::panic::{catch_unwind, UnwindSafe};
+use std::time::Duration;
 
 use libc::c_char;
 
@@ -39,13 +40,21 @@ pub unsafe extern "C" fn asdf_scene_new(
     filename: *const c_char,
     samplerate: u32,
     blocksize: u32,
-    buffer_duration: f32,
+    buffer_blocks: u32,
+    usleeptime: u64,
 ) -> *mut Scene {
     handle_errors(
         || {
             let filename = CStr::from_ptr(filename).to_str().unwrap_display();
             Box::into_raw(Box::new(
-                Scene::new(filename, samplerate, blocksize, buffer_duration).unwrap_display(),
+                Scene::new(
+                    filename,
+                    samplerate,
+                    blocksize,
+                    buffer_blocks,
+                    Duration::from_micros(usleeptime),
+                )
+                .unwrap_display(),
             ))
         },
         std::ptr::null_mut(),

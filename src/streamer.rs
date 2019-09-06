@@ -179,35 +179,21 @@ impl FileStreamer {
     pub fn new(
         mut playlist: Vec<PlaylistEntry>,
         mut file_storage: FileStorage,
-        samplerate: u32,
         blocksize: u32,
         channels: u32,
-        buffer_duration: f32,
+        buffer_blocks: u32,
+        sleeptime: Duration,
     ) -> FileStreamer {
-        let buffer_blocks = (buffer_duration * samplerate as f32 / blocksize as f32).ceil() as u32;
         let (ready_producer, ready_consumer) = queue::spsc::new(1);
         let (seek_producer, seek_consumer) = queue::spsc::new::<(u64, DataConsumer)>(1);
-        // NB: Using twice the number of blocks as queue size
         let (mut data_producer, data_consumer) =
-            make_data_queue(buffer_blocks as usize * 2, blocksize, channels);
+            make_data_queue(buffer_blocks as usize, blocksize, channels);
         let reader_thread_keep_reading = Arc::new(AtomicBool::new(true));
         let keep_reading = Arc::clone(&reader_thread_keep_reading);
         let reader_thread = thread::spawn(move || -> Result<(), Box<dyn Error + Send + Sync>> {
             let mut data_consumer = Some(data_consumer);
             let mut current_frame = 0;
             let mut seek_frame = 0;
-            let sleeptime = {
-                // TODO: use Duration::from_secs_f32() once stabilized
-                // NB: The used fraction is kinda arbitrary
-                let secs = buffer_duration / 10.0;
-                const NANOS_PER_SEC: u32 = 1_000_000_000;
-                let nanos = secs * (NANOS_PER_SEC as f32);
-                let nanos = nanos as u128;
-                Duration::new(
-                    (nanos / u128::from(NANOS_PER_SEC)) as u64,
-                    (nanos % u128::from(NANOS_PER_SEC)) as u32,
-                )
-            };
 
             while keep_reading.load(Ordering::Acquire) {
                 if let Ok((frame, mut queue)) = seek_consumer.pop() {
@@ -247,7 +233,6 @@ impl FileStreamer {
                 // Make sure the block is queued before data_consumer is sent
                 drop(block);
 
-                // TODO: get this information from the queue itself?
                 if current_frame - seek_frame >= u64::from(buffer_blocks) * u64::from(blocksize) {
                     if let Some(data_consumer) = data_consumer.take() {
                         // There is only one data queue, push() will always succeed

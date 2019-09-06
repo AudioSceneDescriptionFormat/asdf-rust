@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use asdfspline::AsdfSpline;
 use regex::Regex;
@@ -28,7 +29,8 @@ pub struct SceneInitializer<'a> {
     dir: PathBuf,
     samplerate: u32,
     blocksize: u32,
-    buffer_duration: f32,
+    buffer_blocks: u32,
+    sleeptime: Duration,
     all_ids: HashSet<String>,
     sources: Vec<String>,
     current_id_suffix: u32,
@@ -120,7 +122,8 @@ pub fn load_scene(
     path: &Path,
     samplerate: u32,
     blocksize: u32,
-    buffer_duration: f32,
+    buffer_blocks: u32,
+    sleeptime: Duration,
 ) -> Result<Scene, LoadError> {
     let file_data = fs::read_to_string(path).context(path)?;
     let mut element_stack = Vec::<(Box<dyn Element>, xml::StrSpan)>::new();
@@ -128,7 +131,8 @@ pub fn load_scene(
         dir: path.parent().unwrap().into(),
         samplerate,
         blocksize,
-        buffer_duration,
+        buffer_blocks,
+        sleeptime,
         ..Default::default()
     };
     let mut attributes = Attributes::new();
