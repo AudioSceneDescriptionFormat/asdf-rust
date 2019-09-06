@@ -7,8 +7,7 @@ cache: cargo
 before_script:
   - rustup component add rustfmt
   - rustup component add clippy
-  - cargo install cargo-readme --force
-  - cargo install cargo-c --force --git https://github.com/lu-zero/cargo-c.git
+  - cargo install cargo-readme cargo-c --force
 
 script:
   - cargo build --verbose --all
