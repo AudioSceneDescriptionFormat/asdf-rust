@@ -203,7 +203,7 @@ pub fn load_scene(
                 ..
             } => {
                 no_namespaces(prefix).context(path)?;
-                let new_element = match element_stack.last() {
+                let new_element = match element_stack.last_mut() {
                     Some((parent, parent_span)) => parent
                         .open_child_element(name, *parent_span)
                         .context(path)?,
