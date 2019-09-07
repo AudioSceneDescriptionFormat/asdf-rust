@@ -185,8 +185,11 @@ trait Transformer {
     fn get_transform(&self, frame: u64) -> Transform;
 }
 
+#[derive(Default)]
 struct Source {
     id: Option<String>,
+    name: Option<String>,
+    model: Option<String>,
     /// List of transforms that define when source is active
     activity: Box<[usize]>,
     // TODO: live or file source?

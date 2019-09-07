@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use libc::c_char;
 
-use crate::{Scene, Transform};
+use crate::{Scene, Source, Transform};
 
 #[repr(C)]
 #[derive(Default)]
@@ -32,6 +32,44 @@ impl From<Option<Transform>> for AsdfTransform {
             }
         }
         result
+    }
+}
+
+#[repr(C)]
+pub struct AsdfSource {
+    id: *const c_char,
+    name: *const c_char,
+    model: *const c_char,
+}
+
+impl AsdfSource {
+    fn new(source: &Source) -> AsdfSource {
+        fn char_ptr(s: &Option<String>) -> *const c_char {
+            CString::new(s.as_ref().map(String::as_ref).unwrap_or(""))
+                .unwrap()
+                .into_raw()
+        }
+        AsdfSource {
+            id: char_ptr(&source.id),
+            name: char_ptr(&source.name),
+            model: char_ptr(&source.model),
+        }
+    }
+}
+
+impl Drop for AsdfSource {
+    fn drop(&mut self) {
+        unsafe {
+            CString::from_raw(self.id as *mut _);
+            CString::from_raw(self.name as *mut _);
+            CString::from_raw(self.model as *mut _);
+        }
+    }
+}
+
+impl Scene {
+    pub fn get_source(&self, index: usize) -> AsdfSource {
+        AsdfSource::new(&self.sources[index])
     }
 }
 
@@ -76,34 +114,24 @@ pub unsafe extern "C" fn asdf_scene_file_sources(ptr: *mut Scene) -> u32 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn asdf_scene_get_source_id(
-    ptr: *mut Scene,
-    index: libc::size_t,
-) -> *mut c_char {
+pub unsafe extern "C" fn asdf_scene_get_source(ptr: *mut Scene, index: usize) -> *mut AsdfSource {
     // TODO: use handle_errors() once the ring buffer is UnwindSafe
     assert!(!ptr.is_null());
     let scene = &mut *ptr;
-    CString::new(
-        scene
-            .get_source_id(index)
-            .map(|id| id.clone())
-            .unwrap_or("".into()),
-    )
-    .unwrap()
-    .into_raw()
+    Box::into_raw(Box::new(scene.get_source(index)))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn asdf_string_free(string: *mut c_char) {
-    if !string.is_null() {
-        CString::from_raw(string);
+pub unsafe extern "C" fn asdf_source_free(ptr: *mut AsdfSource) {
+    if !ptr.is_null() {
+        Box::from_raw(ptr);
     }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn asdf_scene_get_source_transform(
     ptr: *mut Scene,
-    source_idx: libc::size_t,
+    source_idx: usize,
     frame: u64,
 ) -> AsdfTransform {
     // TODO: use handle_errors() once the ring buffer is UnwindSafe

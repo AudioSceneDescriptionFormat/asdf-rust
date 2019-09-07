@@ -32,7 +32,7 @@ pub struct SceneInitializer<'a> {
     buffer_blocks: u32,
     sleeptime: Duration,
     all_ids: HashSet<String>,
-    sources: Vec<Option<String>>,
+    sources: Vec<Source>,
     current_id_suffix: u32,
     file_storage: FileStorage,
     transformer_storage: Vec<Box<dyn Transformer>>,
@@ -330,6 +330,7 @@ pub fn load_scene(
                     format!(
                         "Clip overlap in source \"{}\"",
                         scene.sources[source_idx]
+                            .id
                             .as_ref()
                             .expect("Overlap cannot happen in sources without ID")
                     ),
@@ -340,16 +341,15 @@ pub fn load_scene(
             activity.insert(idx, (begin, end, transform_idx))
         }
     }
+    scene
+        .sources
+        .iter_mut()
+        .zip(source_activity)
+        .for_each(|(source, activity)| {
+            source.activity = activity.into_iter().map(|(_, _, idx)| idx).collect();
+        });
     Ok(Scene {
-        sources: scene
-            .sources
-            .into_iter()
-            .zip(source_activity)
-            .map(|(id, activity)| Source {
-                id,
-                activity: activity.into_iter().map(|(_, _, idx)| idx).collect(),
-            })
-            .collect(),
+        sources: scene.sources,
         streamer: scene.streamer.unwrap(),
         transformers: scene
             .transformer_storage
@@ -464,13 +464,17 @@ impl<'a> SceneInitializer<'a> {
             if self
                 .sources
                 .iter()
-                .filter_map(|x| x.as_ref())
+                .filter_map(|src| src.id.as_ref())
                 .any(|s| *s == id)
             {
                 return Ok(Some(id));
             }
             let id = self.parse_id(value)?;
-            self.sources.push(Some(id.clone()));
+            self.sources.push(Source {
+                id: Some(id.clone()),
+                // TODO: live or file source?
+                ..Default::default()
+            });
             Ok(Some(id))
         } else {
             Ok(None)

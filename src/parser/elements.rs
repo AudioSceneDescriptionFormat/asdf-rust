@@ -10,7 +10,7 @@ use crate::audiofile::dynamic::{load_audio_file, AudioFile};
 use crate::error::ResultExt;
 use crate::streamer::FileStreamer;
 use crate::transform::{get_length, parse_pos, parse_transform, Transform, Vec3};
-use crate::Transformer;
+use crate::{Source, Transformer};
 
 use super::error::ParseError;
 use super::time::{frames2seconds, seconds2frames, Seconds};
@@ -132,8 +132,7 @@ impl<'a> Element<'a> for AsdfElement {
         let result = match name.as_str() {
             "head" => {
                 if self.previous_child.is_empty() {
-                    // TODO: find <meta> and <source> elements
-                    Err(ParseError::new("TODO: implement <head>", name))
+                    Ok(Box::new(HeadElement::new()) as Box<dyn Element>)
                 } else {
                     Err(ParseError::new("No element is allowed before <head>", name))
                 }
@@ -191,6 +190,92 @@ impl<'a> Element<'a> for AsdfElement {
             scene.buffer_blocks,
             scene.sleeptime,
         ));
+        Ok(())
+    }
+}
+
+struct HeadElement {}
+
+impl HeadElement {
+    pub fn new() -> HeadElement {
+        HeadElement {}
+    }
+}
+
+impl<'a> Element<'a> for HeadElement {
+    fn parse_attributes(
+        &mut self,
+        _attributes: &mut Attributes,
+        _span: xml::StrSpan,
+        _scene: &mut SceneInitializer,
+    ) -> Result<(), ParseError> {
+        // No attributes are allowed
+        Ok(())
+    }
+
+    fn open_child_element(
+        &mut self,
+        name: xml::StrSpan,
+        _parent_span: xml::StrSpan,
+    ) -> Result<Box<dyn Element<'a>>, ParseError> {
+        match name.as_str() {
+            "meta" => Err(ParseError::new("TODO: implement <meta> tags", name)),
+            "source" => Ok(Box::new(SourceElement::new())),
+            _ => Err(ParseError::new(
+                format!("No <{}> elements allowed in <head>", name.as_str()),
+                name,
+            )),
+        }
+    }
+
+    fn close(
+        self: Box<Self>,
+        _span: xml::StrSpan<'a>,
+        _parent: Option<&mut Box<dyn Element>>,
+        _scene: &mut SceneInitializer<'a>,
+    ) -> Result<(), ParseError> {
+        Ok(())
+    }
+}
+
+struct SourceElement {}
+
+impl SourceElement {
+    pub fn new() -> SourceElement {
+        SourceElement {}
+    }
+}
+
+impl<'a> Element<'a> for SourceElement {
+    fn parse_attributes(
+        &mut self,
+        attributes: &mut Attributes,
+        _span: xml::StrSpan,
+        scene: &mut SceneInitializer,
+    ) -> Result<(), ParseError> {
+        let id = scene.get_id(attributes)?;
+
+        let name = attributes.get_value("name").map(|v| v.to_string());
+        let model = attributes.get_value("model").map(|v| v.to_string());
+
+        // TODO: source without ID is only allowed for live sources!
+
+        scene.sources.push(Source {
+            id,
+            name,
+            model,
+            activity: Default::default(),
+        });
+        Ok(())
+    }
+
+    fn close(
+        self: Box<Self>,
+        _span: xml::StrSpan<'a>,
+        _parent: Option<&mut Box<dyn Element>>,
+        _scene: &mut SceneInitializer<'a>,
+    ) -> Result<(), ParseError> {
+        // TODO: disallow <source/> with no attributes?
         Ok(())
     }
 }
@@ -568,8 +653,8 @@ impl<'a> Element<'a> for ClipElement {
                     scene
                         .sources
                         .iter()
-                        .filter_map(|x| x.as_ref())
-                        .position(|s| *s == source_id)
+                        .filter_map(|s| s.id.as_ref())
+                        .position(|id| *id == source_id)
                         .unwrap()
                 } else {
                     scene.sources.push(Default::default());
