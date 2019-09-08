@@ -32,7 +32,7 @@ pub struct SceneInitializer<'a> {
     buffer_blocks: u32,
     sleeptime: Duration,
     all_ids: HashSet<String>,
-    sources: Vec<String>,
+    sources: Vec<Option<String>>,
     current_id_suffix: u32,
     file_storage: FileStorage,
     transformer_storage: Vec<Box<dyn Transformer>>,
@@ -84,13 +84,13 @@ pub struct TransformerInstance {
 }
 
 struct ConstantTransformer {
-    id: String,
+    id: Option<String>,
     transform: Transform,
 }
 
 impl Transformer for ConstantTransformer {
-    fn id(&self) -> &str {
-        &self.id
+    fn id(&self) -> Option<&String> {
+        self.id.as_ref()
     }
 
     fn get_transform(&self, _frame: u64) -> Transform {
@@ -99,14 +99,14 @@ impl Transformer for ConstantTransformer {
 }
 
 struct SplineTransformer {
-    id: String,
+    id: Option<String>,
     spline: AsdfSpline<f32, Vec3>,
     samplerate: u32,
 }
 
 impl Transformer for SplineTransformer {
-    fn id(&self) -> &str {
-        &self.id
+    fn id(&self) -> Option<&String> {
+        self.id.as_ref()
     }
 
     fn get_transform(&self, frame: u64) -> Transform {
@@ -327,7 +327,12 @@ pub fn load_scene(
                 || (idx < activity.len() && activity[idx].0 < end)
             {
                 return Err(ParseError::new(
-                    format!("Clip overlap in source \"{}\"", scene.sources[source_idx]),
+                    format!(
+                        "Clip overlap in source \"{}\"",
+                        scene.sources[source_idx]
+                            .as_ref()
+                            .expect("Overlap cannot happen in sources without ID")
+                    ),
                     span,
                 ))
                 .context(path);
@@ -445,28 +450,30 @@ impl<'a> SceneInitializer<'a> {
         format!(".asdf:{}", self.current_id_suffix)
     }
 
-    fn get_id(&mut self, attributes: &mut Attributes) -> Result<String, ParseError> {
+    fn get_id(&mut self, attributes: &mut Attributes) -> Result<Option<String>, ParseError> {
         Ok(if let Some(value) = attributes.get_value("id") {
-            self.parse_id(value)?
+            Some(self.parse_id(value)?)
         } else {
-            "".into()
+            None
         })
     }
 
-    fn get_source_id(&mut self, attributes: &mut Attributes) -> Result<String, ParseError> {
+    fn get_source_id(&mut self, attributes: &mut Attributes) -> Result<Option<String>, ParseError> {
         if let Some(value) = attributes.get_value("source") {
             let id = value.to_string();
-            if id.is_empty() {
-                return Err(ParseError::new("Empty source IDs are not allowed", value));
-            }
-            if self.sources.iter().any(|s| *s == id) {
-                return Ok(id);
+            if self
+                .sources
+                .iter()
+                .filter_map(|x| x.as_ref())
+                .any(|s| *s == id)
+            {
+                return Ok(Some(id));
             }
             let id = self.parse_id(value)?;
-            self.sources.push(id.clone());
-            Ok(id)
+            self.sources.push(Some(id.clone()));
+            Ok(Some(id))
         } else {
-            Ok("".into())
+            Ok(None)
         }
     }
 }

@@ -357,8 +357,8 @@ impl<'a> Element<'a> for ParElement {
 
 #[derive(Default)]
 struct ClipElement {
-    clip_id: String,
-    source_id: String,
+    clip_id: Option<String>,
+    source_id: Option<String>,
     file: Option<Box<dyn AudioFile + Send + Sync>>,
     channels: Vec<ChannelElement>,
     /// An optional 0-based source index for each channel in the file.
@@ -424,7 +424,7 @@ impl<'a> Element<'a> for ClipElement {
         _parent_span: xml::StrSpan,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         if name.as_str() == "channel" {
-            if self.source_id.is_empty() {
+            if self.source_id.is_none() {
                 let file_channels = self.file.as_ref().unwrap().channels();
                 if self.channel_map.len() >= file_channels as usize {
                     return Err(ParseError::new(
@@ -490,24 +490,22 @@ impl<'a> Element<'a> for ClipElement {
                         span,
                     ));
                 }
-                let source_number = if channel.source_id.is_empty() {
-                    scene.sources.push(Default::default());
-                    scene.sources.len() - 1
-                } else {
+                let source_number = if let Some(source_id) = channel.source_id {
                     // Source must already exist
                     scene
                         .sources
                         .iter()
-                        .position(|s| *s == channel.source_id)
+                        .filter_map(|x| x.as_ref())
+                        .position(|s| *s == source_id)
                         .unwrap()
+                } else {
+                    scene.sources.push(Default::default());
+                    scene.sources.len() - 1
                 };
                 self.channel_map.push(Some(source_number));
 
-                let mut channel_id = channel.channel_id;
-                if channel_id.is_empty() {
-                    // IDs are required for the parent transformer to work
-                    channel_id = scene.create_new_id();
-                }
+                // IDs are required for the parent transformer to work
+                let channel_id = channel.channel_id.unwrap_or_else(|| scene.create_new_id());
                 self.channel_ids.push(channel_id.clone());
 
                 // <channel> transformer
@@ -515,7 +513,7 @@ impl<'a> Element<'a> for ClipElement {
                 let targets = vec![];
                 let idx = scene.add_transformer(
                     Box::new(ConstantTransformer {
-                        id: channel_id,
+                        id: Some(channel_id),
                         transform: channel.transform.unwrap_or_default(),
                     }),
                     0,
@@ -554,8 +552,8 @@ impl<'a> Element<'a> for ClipElement {
 
 #[derive(Default)]
 struct ChannelElement {
-    channel_id: String,
-    source_id: String,
+    channel_id: Option<String>,
+    source_id: Option<String>,
     skip: Option<u32>,
     transform: Option<Transform>,
 }
@@ -602,7 +600,7 @@ impl<'a> Element<'a> for ChannelElement {
 
 #[derive(Default)]
 struct TransformElement {
-    id: String,
+    id: Option<String>,
     duration: Option<Seconds>,
     targets: Vec<String>,
     transform: Option<Transform>,
@@ -626,6 +624,7 @@ impl<'a> Element<'a> for TransformElement {
         if let Some(apply_to) = attributes.get_value("apply-to") {
             assert!(self.targets.is_empty());
             for s in apply_to.as_str().split_whitespace() {
+                // TODO: make sure IDs are valid?
                 self.targets.push(s.into());
             }
             if self.targets.is_empty() {

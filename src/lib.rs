@@ -91,8 +91,8 @@ impl Scene {
         self.streamer.channels()
     }
 
-    pub fn get_source_id(&self, index: usize) -> &str {
-        &self.sources[index].id
+    pub fn get_source_id(&self, index: usize) -> Option<&String> {
+        self.sources[index].id.as_ref()
     }
 
     pub fn seek(&mut self, frame: u64) -> bool {
@@ -121,7 +121,9 @@ impl Scene {
 
         // Transforms applied directly to the source
 
-        if let Some(additional_transform) = self.get_transform_applying_to(&source.id, frame) {
+        if let Some(additional_transform) =
+            self.get_transform_applying_to(source.id.as_ref(), frame)
+        {
             result.accumulate(&additional_transform);
         }
 
@@ -160,8 +162,8 @@ impl Scene {
         None
     }
 
-    fn get_transform_applying_to(&self, id: &str, frame: u64) -> Option<Transform> {
-        let transformers = self.transformer_map.get(id)?;
+    fn get_transform_applying_to(&self, id: Option<&String>, frame: u64) -> Option<Transform> {
+        let transformers = self.transformer_map.get(id?)?;
 
         // TODO: Establish recursion limit! There might be circular dependencies!
 
@@ -178,14 +180,13 @@ impl Scene {
 }
 
 trait Transformer {
-    fn id(&self) -> &str;
+    fn id(&self) -> Option<&String>;
     /// begin and end is checked before calling this
     fn get_transform(&self, frame: u64) -> Transform;
 }
 
-#[derive(Default)]
 struct Source {
-    id: String,
+    id: Option<String>,
     /// List of transforms that define when source is active
     activity: Box<[usize]>,
     // TODO: live or file source?
