@@ -83,7 +83,14 @@ pub unsafe extern "C" fn asdf_scene_get_source_id(
     // TODO: use handle_errors() once the ring buffer is UnwindSafe
     assert!(!ptr.is_null());
     let scene = &mut *ptr;
-    CString::new(scene.get_source_id(index)).unwrap().into_raw()
+    CString::new(
+        scene
+            .get_source_id(index)
+            .map(|id| id.0.clone())
+            .unwrap_or("".into()),
+    )
+    .unwrap()
+    .into_raw()
 }
 
 #[no_mangle]

@@ -12,7 +12,7 @@ use crate::audiofile::dynamic::AudioFile;
 use crate::error::ResultExt;
 use crate::streamer::FileStreamer;
 use crate::transform::{get_length, Transform, Vec3};
-use crate::{Scene, Source, Transformer};
+use crate::{Id, Scene, Source, Transformer};
 
 mod elements;
 pub mod error;
@@ -31,15 +31,15 @@ pub struct SceneInitializer<'a> {
     blocksize: u32,
     buffer_blocks: u32,
     sleeptime: Duration,
-    all_ids: HashSet<String>,
-    sources: Vec<String>,
+    all_ids: HashSet<Id>,
+    sources: Vec<Option<Id>>,
     current_id_suffix: u32,
     file_storage: FileStorage,
     transformer_storage: Vec<Box<dyn Transformer>>,
     transformer_instances: Vec<TransformerInstance>,
     /// transformer index, source index, span (of closing <clip> tag)
     channel_transformers: Vec<(usize, usize, xml::StrSpan<'a>)>,
-    transformer_map: HashMap<String, Vec<usize>>,
+    transformer_map: HashMap<Id, Vec<usize>>,
     streamer: Option<FileStreamer>,
 }
 
@@ -49,7 +49,7 @@ impl<'a> SceneInitializer<'a> {
         transformer: Box<dyn Transformer>,
         begin: u64,
         duration: u64,
-        targets: &[String],
+        targets: &[Id],
         instances: &mut Vec<TransformerInstance>,
     ) -> usize {
         let idx = self.transformer_storage.len();
@@ -84,13 +84,13 @@ pub struct TransformerInstance {
 }
 
 struct ConstantTransformer {
-    id: String,
+    id: Option<Id>,
     transform: Transform,
 }
 
 impl Transformer for ConstantTransformer {
-    fn id(&self) -> &str {
-        &self.id
+    fn id(&self) -> Option<&Id> {
+        self.id.as_ref()
     }
 
     fn get_transform(&self, _frame: u64) -> Transform {
@@ -99,14 +99,14 @@ impl Transformer for ConstantTransformer {
 }
 
 struct SplineTransformer {
-    id: String,
+    id: Option<Id>,
     spline: AsdfSpline<f32, Vec3>,
     samplerate: u32,
 }
 
 impl Transformer for SplineTransformer {
-    fn id(&self) -> &str {
-        &self.id
+    fn id(&self) -> Option<&Id> {
+        self.id.as_ref()
     }
 
     fn get_transform(&self, frame: u64) -> Transform {
@@ -327,7 +327,12 @@ pub fn load_scene(
                 || (idx < activity.len() && activity[idx].0 < end)
             {
                 return Err(ParseError::new(
-                    format!("Clip overlap in source \"{}\"", scene.sources[source_idx]),
+                    format!(
+                        "Clip overlap in source \"{}\"",
+                        scene.sources[source_idx]
+                            .as_ref()
+                            .expect("Overlap cannot happen in sources without ID")
+                    ),
                     span,
                 ))
                 .context(path);
@@ -403,7 +408,7 @@ impl<'a> SceneInitializer<'a> {
     ///
     /// Returning an empty string means the attribute didn't exist.
     /// NB: Empty strings are not valid XML IDs!
-    fn parse_id(&mut self, value: xml::StrSpan) -> Result<String, ParseError> {
+    fn parse_id(&mut self, value: xml::StrSpan) -> Result<Id, ParseError> {
         lazy_static! {
             // TODO: Allow flanking whitespace?
             static ref RE: Regex = Regex::new(r"(?x)
@@ -433,6 +438,7 @@ impl<'a> SceneInitializer<'a> {
                 value,
             ));
         }
+        let id = Id(id);
         if !self.all_ids.insert(id.clone()) {
             return Err(ParseError::new(format!("Non-unique ID: \"{}\"", id), value));
         }
@@ -440,33 +446,35 @@ impl<'a> SceneInitializer<'a> {
     }
 
     /// This creates intentionally invalid XML IDs for internal use
-    fn create_new_id(&mut self) -> String {
+    fn create_new_id(&mut self) -> Id {
         self.current_id_suffix += 1;
-        format!(".asdf:{}", self.current_id_suffix)
+        Id(format!(".asdf:{}", self.current_id_suffix))
     }
 
-    fn get_id(&mut self, attributes: &mut Attributes) -> Result<String, ParseError> {
+    fn get_id(&mut self, attributes: &mut Attributes) -> Result<Option<Id>, ParseError> {
         Ok(if let Some(value) = attributes.get_value("id") {
-            self.parse_id(value)?
+            Some(self.parse_id(value)?)
         } else {
-            "".into()
+            None
         })
     }
 
-    fn get_source_id(&mut self, attributes: &mut Attributes) -> Result<String, ParseError> {
+    fn get_source_id(&mut self, attributes: &mut Attributes) -> Result<Option<Id>, ParseError> {
         if let Some(value) = attributes.get_value("source") {
-            let id = value.to_string();
-            if id.is_empty() {
-                return Err(ParseError::new("Empty source IDs are not allowed", value));
-            }
-            if self.sources.iter().any(|s| *s == id) {
-                return Ok(id);
+            let id = Id(value.to_string());
+            if self
+                .sources
+                .iter()
+                .filter_map(|x| x.as_ref())
+                .any(|s| *s == id)
+            {
+                return Ok(Some(id));
             }
             let id = self.parse_id(value)?;
-            self.sources.push(id.clone());
-            Ok(id)
+            self.sources.push(Some(id.clone()));
+            Ok(Some(id))
         } else {
-            Ok("".into())
+            Ok(None)
         }
     }
 }

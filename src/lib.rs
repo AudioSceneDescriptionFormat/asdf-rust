@@ -39,6 +39,7 @@ cargo readme -o README.md
 ```
 */
 use std::collections::HashMap;
+use std::fmt;
 use std::path::Path;
 use std::time::Duration;
 
@@ -58,6 +59,15 @@ use crate::parser::error::LoadError;
 use crate::streamer::FileStreamer;
 use crate::transform::Transform;
 
+#[derive(Eq, PartialEq, Hash, Clone)]
+pub struct Id(String);
+
+impl fmt::Display for Id {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 type TransformerStorage = Box<[(Box<dyn Transformer>, Box<[(u64, u64)]>)]>;
 
 pub struct Scene {
@@ -66,7 +76,7 @@ pub struct Scene {
     /// Transformers with list of activity
     transformers: TransformerStorage,
     /// Map from ID to list of transformers directly applying to this ID
-    transformer_map: HashMap<String, Box<[usize]>>,
+    transformer_map: HashMap<Id, Box<[usize]>>,
 }
 
 impl Scene {
@@ -91,8 +101,8 @@ impl Scene {
         self.streamer.channels()
     }
 
-    pub fn get_source_id(&self, index: usize) -> &str {
-        &self.sources[index].id
+    pub fn get_source_id(&self, index: usize) -> Option<&Id> {
+        self.sources[index].id.as_ref()
     }
 
     pub fn seek(&mut self, frame: u64) -> bool {
@@ -121,7 +131,9 @@ impl Scene {
 
         // Transforms applied directly to the source
 
-        if let Some(additional_transform) = self.get_transform_applying_to(&source.id, frame) {
+        if let Some(additional_transform) =
+            self.get_transform_applying_to(source.id.as_ref(), frame)
+        {
             result.accumulate(&additional_transform);
         }
 
@@ -160,8 +172,8 @@ impl Scene {
         None
     }
 
-    fn get_transform_applying_to(&self, id: &str, frame: u64) -> Option<Transform> {
-        let transformers = self.transformer_map.get(id)?;
+    fn get_transform_applying_to(&self, id: Option<&Id>, frame: u64) -> Option<Transform> {
+        let transformers = self.transformer_map.get(id?)?;
 
         // TODO: Establish recursion limit! There might be circular dependencies!
 
@@ -178,14 +190,13 @@ impl Scene {
 }
 
 trait Transformer {
-    fn id(&self) -> &str;
+    fn id(&self) -> Option<&Id>;
     /// begin and end is checked before calling this
     fn get_transform(&self, frame: u64) -> Transform;
 }
 
-#[derive(Default)]
 struct Source {
-    id: String,
+    id: Option<Id>,
     /// List of transforms that define when source is active
     activity: Box<[usize]>,
     // TODO: live or file source?
