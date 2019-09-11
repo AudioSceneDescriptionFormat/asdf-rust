@@ -95,6 +95,14 @@ impl Scene {
         self.sources[index].id.as_ref()
     }
 
+    pub fn get_source_name(&self, index: usize) -> Option<&String> {
+        self.sources[index].name.as_ref()
+    }
+
+    pub fn get_source_model(&self, index: usize) -> Option<&String> {
+        self.sources[index].model.as_ref()
+    }
+
     pub fn seek(&mut self, frame: u64) -> bool {
         self.streamer.seek(frame)
     }
