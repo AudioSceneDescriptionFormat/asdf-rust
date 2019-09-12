@@ -111,10 +111,11 @@ impl Transformer for SplineTransformer {
 
     fn get_transform(&self, frame: u64) -> Transform {
         let time = frames2seconds(frame, self.samplerate).0;
-        let mut result = Transform::default();
-        result.translation = Some(self.spline.evaluate(time, get_length));
-        // TODO: rotation etc.
-        result
+        Transform {
+            translation: Some(self.spline.evaluate(time, get_length)),
+            // TODO: proper rotation
+            rotation: None,
+        }
     }
 }
 
