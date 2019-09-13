@@ -20,55 +20,58 @@ pub struct Transform {
     // TODO: scale?
     pub rotation: Option<Quat>,
     pub translation: Option<Vec3>,
-
     // NB: Some operations are order-independent: gain, ...
     // TODO: gain, ...
 }
 
 impl Transform {
-    /// NB: rotation stays unchanged
-    pub fn apply_translation(&mut self, other: Option<Vec3>) {
-        if let Some(translation) = other {
-            *self.translation.get_or_insert(Vec3::zeros()) += translation;
-        }
-    }
-
-    /// Rotation (around origin): rotate translation, rotate orientation
-    pub fn apply_rotation(&mut self, other: Option<Quat>) {
-        // NB: The order of the operations doesn't matter
-        if let Some(rotation) = other {
-            self.translation = self.translation.map(|v| rotation * v);
-            // NB: other rotation is left-multiplied
-            self.rotation = self.rotation.map(|r| rotation * r).or(Some(rotation));
-            // TODO: renormalize_fast()?
-        }
-    }
-
-    pub fn accumulate(&mut self, other: &Transform) {
+    /// Panics if there is more than one rotation.
+    pub fn merge(one: Option<Transform>, two: Option<Transform>) -> Option<Transform> {
         // TODO: Repeated scaling is disallowed
         // NB: Repeated rotation is disallowed
-
-        if let Some(rotation) = other.rotation {
-            if self.rotation.is_some() {
-                // TODO: don't panic, proper Result
-                panic!("Multiple rotations at once");
-            } else {
-                // NB: The rotation does not affect self.translation!
-                self.rotation = Some(rotation);
-            }
+        if one.is_none() {
+            return two;
         }
-
-        self.apply_translation(other.translation);
-
-        // TODO: handle other members
+        if let Some(one) = one {
+            Some(if let Some(two) = two {
+                if one.rotation.is_some() && two.rotation.is_some() {
+                    // TODO: This should be checked when loading the file
+                    panic!("Multiple rotations at once");
+                }
+                Transform {
+                    rotation: one.rotation.xor(two.rotation),
+                    translation: one
+                        .translation
+                        .map(|v| v + two.translation.unwrap_or_else(Vec3::zeros)),
+                }
+            } else {
+                one
+            })
+        } else {
+            two
+        }
     }
 
-    pub fn apply(&mut self, other: &Transform) {
-        // NB: We apply rotation first, then translation.
-        self.apply_rotation(other.rotation);
-        self.apply_translation(other.translation);
+    pub fn apply(&mut self, other: Option<Transform>) {
+        if let Some(other) = other {
+            // NB: We apply rotation first, then translation.
 
-        // TODO: handle other members
+            // Rotation (around origin): rotate translation, combine rotations
+            if let Some(rotation) = other.rotation {
+                // NB: The order of the operations doesn't matter
+                self.translation = self.translation.map(|v| rotation * v);
+                // NB: other rotation is left-multiplied
+                self.rotation = self.rotation.map(|r| rotation * r).or(Some(rotation));
+                // TODO: renormalize_fast()?
+            }
+
+            if let Some(translation) = other.translation {
+                // NB: rotation stays unchanged
+                *self.translation.get_or_insert_with(Vec3::zeros) += translation;
+            }
+
+            // TODO: handle other members
+        }
     }
 }
 

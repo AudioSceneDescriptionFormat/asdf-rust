@@ -124,18 +124,18 @@ impl Scene {
 
         // TODO: what about live sources?
 
-        // NB: If source is not active, we don't need to check other transforms
-        let mut result = self.get_clip_transform(source, frame)?;
+        let clip_transform = self.get_clip_transform(source, frame);
+
+        if clip_transform.is_none() {
+            // NB: If source is not active, we don't need to check other transforms
+            return None;
+        }
 
         // Transforms applied directly to the source
 
-        if let Some(additional_transform) =
-            self.get_transform_applying_to(source.id.as_ref(), frame)
-        {
-            result.accumulate(&additional_transform);
-        }
+        let source_transform = self.get_transform_applying_to(source.id.as_ref(), frame);
 
-        Some(result)
+        Transform::merge(clip_transform, source_transform)
     }
 
     // TODO: what about transforms of live sources?
@@ -161,9 +161,7 @@ impl Scene {
                 let mut result = transformer.get_transform(frame - begin);
                 let id = transformer.id();
                 // TODO: Establish recursion limit! There might be circular dependencies!
-                if let Some(additional_transform) = self.get_transform_applying_to(id, frame) {
-                    result.apply(&additional_transform);
-                }
+                result.apply(self.get_transform_applying_to(id, frame));
                 return Some(result);
             }
         }
@@ -172,18 +170,10 @@ impl Scene {
 
     fn get_transform_applying_to(&self, id: Option<&String>, frame: u64) -> Option<Transform> {
         let transformers = self.transformer_map.get(id?)?;
-
         // TODO: Establish recursion limit! There might be circular dependencies!
-
-        let mut result: Option<Transform> = None;
-        for &idx in transformers.iter() {
-            if let Some(transform) = self.get_transform_from(idx, frame) {
-                result
-                    .get_or_insert(Default::default())
-                    .accumulate(&transform);
-            }
-        }
-        result
+        transformers.iter().fold(None, |transform, &idx| {
+            Transform::merge(transform, self.get_transform_from(idx, frame))
+        })
     }
 }
 
