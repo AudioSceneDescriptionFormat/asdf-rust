@@ -117,22 +117,17 @@ impl Scene {
     /// Panics if `source_idx` is out of range.
     pub fn get_source_transform(&self, source_idx: usize, frame: u64) -> Option<Transform> {
         // NB: This function is supposed to be realtime-safe!
-
         let source = &self.sources[source_idx];
-
-        // Transforms applied to <clip> (and its <channel> elements)
 
         // TODO: what about live sources?
 
+        // Transforms applied to <clip> (and its <channel> elements)
         let clip_transform = self.get_clip_transform(source, frame);
 
-        if clip_transform.is_none() {
-            // NB: If source is not active, we don't need to check other transforms
-            return None;
-        }
+        // If source is not active, we don't need to check other transforms
+        clip_transform.as_ref()?;
 
         // Transforms applied directly to the source
-
         let source_transform = self.get_transform_applying_to(source.id.as_ref(), frame);
 
         Transform::merge(clip_transform, source_transform)

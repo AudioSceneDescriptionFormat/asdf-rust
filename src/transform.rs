@@ -103,14 +103,18 @@ pub fn parse_pos(value: xml::StrSpan) -> Result<Vec3, ParseError> {
         .as_str()
         .split_whitespace()
         .map(|s| f32::from_str(s).context(value));
-    let x = values.next().unwrap_or(Err(ParseError::new(
-        "At least 2 numbers are needed for \"pos\"",
-        value,
-    )))?;
-    let y = values.next().unwrap_or(Err(ParseError::new(
-        "At least 2 numbers are needed for \"pos\"",
-        value,
-    )))?;
+    let x = values.next().unwrap_or_else(|| {
+        Err(ParseError::new(
+            "At least 2 numbers are needed for \"pos\"",
+            value,
+        ))
+    })?;
+    let y = values.next().unwrap_or_else(|| {
+        Err(ParseError::new(
+            "At least 2 numbers are needed for \"pos\"",
+            value,
+        ))
+    })?;
     let z = values.next().unwrap_or(Ok(0.0))?;
     if values.next().is_some() {
         return Err(ParseError::new(
@@ -126,10 +130,12 @@ pub fn parse_rot(value: xml::StrSpan) -> Result<Quat, ParseError> {
         .as_str()
         .split_whitespace()
         .map(|s| f32::from_str(s).context(value));
-    let azimuth = values.next().unwrap_or(Err(ParseError::new(
-        "At least 1 number is needed for \"rot\"",
-        value,
-    )))?;
+    let azimuth = values.next().unwrap_or_else(|| {
+        Err(ParseError::new(
+            "At least 1 number is needed for \"rot\"",
+            value,
+        ))
+    })?;
     let elevation = values.next().unwrap_or(Ok(0.0))?;
     let roll = values.next().unwrap_or(Ok(0.0))?;
     if values.next().is_some() {
