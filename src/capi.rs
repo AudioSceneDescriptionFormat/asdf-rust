@@ -9,12 +9,13 @@ use std::time::Duration;
 
 use libc::c_char;
 
-use crate::{Scene, Source, Transform};
+use crate::transform::{Quat, Transform, Vec3};
+use crate::{Scene, Source};
 
 #[repr(C)]
 #[derive(Default)]
 pub struct AsdfTransform {
-    flags: u8,
+    active: bool,
     pos: [f32; 3],
     /// Vector part of quaternion
     rot_v: [f32; 3],
@@ -22,27 +23,19 @@ pub struct AsdfTransform {
     rot_s: f32,
 }
 
-pub const ASDF_TRANSFORM_ACTIVE: u8 = 1;
-pub const ASDF_TRANSFORM_POS: u8 = 1 << 1;
-pub const ASDF_TRANSFORM_ROT: u8 = 1 << 2;
-
 impl From<Option<Transform>> for AsdfTransform {
     fn from(t: Option<Transform>) -> AsdfTransform {
-        let mut result = AsdfTransform::default();
         if let Some(t) = t {
-            result.flags |= ASDF_TRANSFORM_ACTIVE;
-            if let Some(pos) = t.translation {
-                result.flags |= ASDF_TRANSFORM_POS;
-                result.pos.copy_from_slice(pos.as_slice());
+            let rot = t.rotation.unwrap_or_else(Quat::identity);
+            AsdfTransform {
+                active: true,
+                pos: t.translation.unwrap_or_else(Vec3::zeros).into(),
+                rot_v: rot.vector().into(),
+                rot_s: rot.scalar(),
             }
-            if let Some(rot) = t.rotation {
-                result.flags |= ASDF_TRANSFORM_ROT;
-                let quat = rot.quaternion();
-                result.rot_v.copy_from_slice(quat.vector().as_slice());
-                result.rot_s = quat.scalar();
-            }
+        } else {
+            AsdfTransform::default()
         }
-        result
     }
 }
 
