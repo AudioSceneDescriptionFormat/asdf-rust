@@ -12,7 +12,7 @@ use crate::audiofile::dynamic::AudioFile;
 use crate::error::ResultExt;
 use crate::streamer::FileStreamer;
 use crate::transform::{get_length, Transform, Vec3};
-use crate::{Scene, Source, Transformer};
+use crate::{Scene, Source, Transformer, REFERENCE_ID};
 
 mod elements;
 pub mod error;
@@ -41,6 +41,7 @@ pub struct SceneInitializer<'a> {
     channel_transformers: Vec<(usize, usize, xml::StrSpan<'a>)>,
     transformer_map: HashMap<String, Vec<usize>>,
     streamer: Option<FileStreamer>,
+    reference_transform: Transform,
 }
 
 impl<'a> SceneInitializer<'a> {
@@ -363,6 +364,7 @@ pub fn load_scene(
             .into_iter()
             .map(|(k, v)| (k, v.into()))
             .collect(),
+        reference_transform: scene.reference_transform,
     })
 }
 
@@ -433,6 +435,12 @@ impl<'a> SceneInitializer<'a> {
                 ").unwrap();
         }
         let id = value.to_string();
+        if id == REFERENCE_ID {
+            return Err(ParseError::new(
+                format!("Reserved ID: \"{}\"", REFERENCE_ID),
+                value,
+            ));
+        }
         if !RE.is_match(&id) {
             return Err(ParseError::new(
                 format!("Invalid XML ID: \"{}\"", id),

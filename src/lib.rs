@@ -58,6 +58,8 @@ use crate::parser::error::LoadError;
 use crate::streamer::FileStreamer;
 use crate::transform::Transform;
 
+const REFERENCE_ID: &str = "reference";
+
 type TransformerStorage = Box<[(Box<dyn Transformer>, Box<[(u64, u64)]>)]>;
 
 pub struct Scene {
@@ -67,6 +69,7 @@ pub struct Scene {
     transformers: TransformerStorage,
     /// Map from ID to list of transformers directly applying to this ID
     transformer_map: HashMap<String, Box<[usize]>>,
+    reference_transform: Transform,
 }
 
 impl Scene {
@@ -132,6 +135,13 @@ impl Scene {
             self.get_transform_applying_to(source.id.as_ref(), frame),
         ));
         Some(source_transform)
+    }
+
+    pub fn get_reference_transform(&self, frame: u64) -> Option<Transform> {
+        let mut reference_transform = self.reference_transform.clone();
+        reference_transform
+            .apply(self.get_transform_applying_to(Some(&REFERENCE_ID.into()), frame));
+        Some(reference_transform)
     }
 
     // TODO: what about transforms of live sources?

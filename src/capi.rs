@@ -144,6 +144,18 @@ pub unsafe extern "C" fn asdf_scene_get_source_transform(
     scene.get_source_transform(source_idx, frame).into()
 }
 
+/// Reference transform is always "active".
+#[no_mangle]
+pub unsafe extern "C" fn asdf_scene_get_reference_transform(
+    ptr: *mut Scene,
+    frame: u64,
+) -> AsdfTransform {
+    // TODO: use handle_errors() once the ring buffer is UnwindSafe
+    assert!(!ptr.is_null());
+    let scene = &mut *ptr;
+    scene.get_reference_transform(frame).into()
+}
+
 // TODO: possibility to report errors?
 #[no_mangle]
 pub unsafe extern "C" fn asdf_scene_seek(ptr: *mut Scene, frame: u64) -> bool {

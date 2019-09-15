@@ -10,7 +10,7 @@ use crate::audiofile::dynamic::{load_audio_file, AudioFile};
 use crate::error::ResultExt;
 use crate::streamer::FileStreamer;
 use crate::transform::{get_length, parse_pos, parse_transform, Transform, Vec3};
-use crate::{Source, Transformer};
+use crate::{Source, Transformer, REFERENCE_ID};
 
 use super::error::ParseError;
 use super::time::{frames2seconds, seconds2frames, Seconds};
@@ -221,6 +221,7 @@ impl<'a> Element<'a> for HeadElement {
         match name.as_str() {
             "meta" => Err(ParseError::new("TODO: implement <meta> tags", name)),
             "source" => Ok(Box::new(SourceElement::new())),
+            "reference" => Ok(Box::new(ReferenceElement::new())),
             _ => Err(ParseError::new(
                 format!("No <{}> elements allowed in <head>", name.as_str()),
                 name,
@@ -278,6 +279,44 @@ impl<'a> Element<'a> for SourceElement {
         _scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         // TODO: disallow <source/> with no attributes?
+        Ok(())
+    }
+}
+
+struct ReferenceElement {}
+
+impl ReferenceElement {
+    pub fn new() -> ReferenceElement {
+        ReferenceElement {}
+    }
+}
+
+impl<'a> Element<'a> for ReferenceElement {
+    fn parse_attributes(
+        &mut self,
+        attributes: &mut Attributes,
+        _span: xml::StrSpan,
+        scene: &mut SceneInitializer,
+    ) -> Result<(), ParseError> {
+        if let Some(id) = attributes.get_value("id") {
+            if id.as_str() != REFERENCE_ID {
+                return Err(ParseError::new(
+                    format!("Reference ID must be {:?}", REFERENCE_ID),
+                    id,
+                ));
+            }
+        }
+        scene.reference_transform = parse_transform(attributes)?.unwrap_or_default();
+        Ok(())
+    }
+
+    fn close(
+        self: Box<Self>,
+        _span: xml::StrSpan<'a>,
+        _parent: Option<&mut Box<dyn Element>>,
+        _scene: &mut SceneInitializer<'a>,
+    ) -> Result<(), ParseError> {
+        // TODO: disallow <reference/> with no attributes?
         Ok(())
     }
 }
