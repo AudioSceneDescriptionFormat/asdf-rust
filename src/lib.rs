@@ -119,18 +119,19 @@ impl Scene {
         // NB: This function is supposed to be realtime-safe!
         let source = &self.sources[source_idx];
 
-        // TODO: what about live sources?
-
         // Transforms applied to <clip> (and its <channel> elements)
         let clip_transform = self.get_clip_transform(source, frame);
 
+        // TODO: what about live sources?
         // If source is not active, we don't need to check other transforms
         clip_transform.as_ref()?;
 
-        // Transforms applied directly to the source
-        let source_transform = self.get_transform_applying_to(source.id.as_ref(), frame);
-
-        Transform::merge(clip_transform, source_transform)
+        let mut source_transform = source.transform.clone();
+        source_transform.apply(Transform::merge(
+            clip_transform,
+            self.get_transform_applying_to(source.id.as_ref(), frame),
+        ));
+        Some(source_transform)
     }
 
     // TODO: what about transforms of live sources?
@@ -183,6 +184,8 @@ struct Source {
     id: Option<String>,
     name: Option<String>,
     model: Option<String>,
+    /// Transform given in <head> element
+    transform: Transform,
     /// List of transforms that define when source is active
     activity: Box<[usize]>,
     // TODO: live or file source?

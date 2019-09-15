@@ -260,11 +260,13 @@ impl<'a> Element<'a> for SourceElement {
 
         // TODO: source without ID is only allowed for live sources!
 
+        let transform = parse_transform(attributes)?.unwrap_or_default();
         scene.sources.push(Source {
             id,
             name,
             model,
             activity: Default::default(),
+            transform,
         });
         Ok(())
     }
