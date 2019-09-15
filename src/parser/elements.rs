@@ -194,11 +194,13 @@ impl<'a> Element<'a> for AsdfElement {
     }
 }
 
-struct HeadElement {}
+struct HeadElement {
+    reference: bool,
+}
 
 impl HeadElement {
     pub fn new() -> HeadElement {
-        HeadElement {}
+        HeadElement { reference: false }
     }
 }
 
@@ -221,7 +223,14 @@ impl<'a> Element<'a> for HeadElement {
         match name.as_str() {
             "meta" => Err(ParseError::new("TODO: implement <meta> tags", name)),
             "source" => Ok(Box::new(SourceElement::new())),
-            "reference" => Ok(Box::new(ReferenceElement::new())),
+            "reference" => {
+                if self.reference {
+                    Err(ParseError::new("Only one <reference> is allowed", name))
+                } else {
+                    self.reference = true;
+                    Ok(Box::new(ReferenceElement::new()))
+                }
+            }
             _ => Err(ParseError::new(
                 format!("No <{}> elements allowed in <head>", name.as_str()),
                 name,
