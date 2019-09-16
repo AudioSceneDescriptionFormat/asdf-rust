@@ -4,7 +4,7 @@
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::fmt::Display;
-use std::panic::{catch_unwind, UnwindSafe};
+use std::panic::{catch_unwind, AssertUnwindSafe, UnwindSafe};
 use std::time::Duration;
 
 use libc::c_char;
@@ -119,7 +119,6 @@ pub unsafe extern "C" fn asdf_scene_file_sources(ptr: *mut Scene) -> u32 {
 
 #[no_mangle]
 pub unsafe extern "C" fn asdf_scene_get_source(ptr: *mut Scene, index: usize) -> *mut AsdfSource {
-    // TODO: use handle_errors() once the ring buffer is UnwindSafe
     assert!(!ptr.is_null());
     let scene = &mut *ptr;
     Box::into_raw(Box::new(scene.get_source(index)))
@@ -138,7 +137,6 @@ pub unsafe extern "C" fn asdf_scene_get_source_transform(
     source_idx: usize,
     frame: u64,
 ) -> AsdfTransform {
-    // TODO: use handle_errors() once the ring buffer is UnwindSafe
     assert!(!ptr.is_null());
     let scene = &mut *ptr;
     scene.get_source_transform(source_idx, frame).into()
@@ -150,7 +148,6 @@ pub unsafe extern "C" fn asdf_scene_get_reference_transform(
     ptr: *mut Scene,
     frame: u64,
 ) -> AsdfTransform {
-    // TODO: use handle_errors() once the ring buffer is UnwindSafe
     assert!(!ptr.is_null());
     let scene = &mut *ptr;
     scene.get_reference_transform(frame).into()
@@ -171,13 +168,22 @@ pub unsafe extern "C" fn asdf_scene_get_audio_data(
     data: *const *mut f32,
     rolling: bool,
 ) -> bool {
-    // TODO: use handle_errors() once the ring buffer is UnwindSafe
-    assert!(!ptr.is_null());
-    let scene = &mut *ptr;
-    assert!(!data.is_null());
-    let data = std::slice::from_raw_parts(data, scene.file_sources() as usize);
-    // TODO: get error message if something is wrong!
-    scene.get_audio_data(data, rolling)
+    // TODO: remove AssertUnwindSafe once ring buffer is UnwindSafe
+    handle_errors(
+        AssertUnwindSafe(|| {
+            assert!(!ptr.is_null());
+            let scene = &mut *ptr;
+            assert!(!data.is_null());
+            let data = std::slice::from_raw_parts(data, scene.file_sources() as usize);
+            let success = scene.get_audio_data(data, rolling);
+            if !success {
+                // TODO: get more error details from streamer
+                set_error("Unrecoverable error getting audio file data");
+            }
+            success
+        }),
+        false,
+    )
 }
 
 /// The error message will be freed if another error occurs. It is the caller's
