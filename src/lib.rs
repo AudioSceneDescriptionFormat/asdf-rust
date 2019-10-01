@@ -23,7 +23,6 @@ Using [cargo-c](https://github.com/lu-zero/cargo-c)
 (`cargo install cargo-c`):
 
 ```text
-cargo cbuild --release
 cargo cinstall --release
 ```
 
