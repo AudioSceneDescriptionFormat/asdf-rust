@@ -110,6 +110,10 @@ impl Scene {
     }
 
     /// Return value of `false` means un-recoverable error
+    ///
+    /// # Safety
+    ///
+    /// `target` must be pointing to a writable memory area of sufficient size.
     #[must_use]
     pub unsafe fn get_audio_data(&mut self, target: &[*mut f32], rolling: bool) -> bool {
         self.streamer.get_data(target, rolling)
