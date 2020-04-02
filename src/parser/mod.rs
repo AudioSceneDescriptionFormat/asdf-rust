@@ -9,7 +9,6 @@ use superslice::Ext; // for slice::lower_bound_by_key()
 use xmlparser as xml;
 
 use crate::audiofile::dynamic::AudioFile;
-use crate::error::ResultExt;
 use crate::streamer::FileStreamer;
 use crate::transform::{get_length, Transform, Vec3};
 use crate::{Scene, Source, Transformer, REFERENCE_ID};
@@ -120,6 +119,15 @@ impl Transformer for SplineTransformer {
     }
 }
 
+macro_rules! parse_error {
+    ($span:expr, $msg:expr) => {
+        return Err(ParseError::new($msg, $span).into());
+    };
+    ($span:expr, $fmt:expr, $($arg:expr),+) => {
+        return Err(ParseError::new(format!($fmt, $($arg),+), $span).into());
+    };
+}
+
 pub fn load_scene(
     path: &Path,
     samplerate: u32,
@@ -127,7 +135,7 @@ pub fn load_scene(
     buffer_blocks: u32,
     sleeptime: Duration,
 ) -> Result<Scene, LoadError> {
-    let file_data = fs::read_to_string(path).context(path)?;
+    let file_data = fs::read_to_string(path)?;
     let mut element_stack = Vec::<(Box<dyn Element>, xml::StrSpan)>::new();
     let mut scene = SceneInitializer {
         dir: path.parent().unwrap().into(),
@@ -141,7 +149,7 @@ pub fn load_scene(
 
     for token in xml::Tokenizer::from(&file_data as &str) {
         use xml::Token::*;
-        match token.context(path)? {
+        match token? {
             Declaration {
                 version,
                 encoding,
@@ -149,54 +157,30 @@ pub fn load_scene(
                 span,
             } => {
                 if version.as_str() != "1.0" {
-                    return Err(ParseError::new(
-                        "Only XML version 1.0 is supported",
-                        version,
-                    ))
-                    .context(path);
+                    parse_error!(version, "Only XML version 1.0 is supported")
                 }
                 if let Some(encoding) = encoding {
                     if encoding.as_str().to_lowercase() != "utf-8" {
-                        return Err(ParseError::new(
-                            "Only UTF-8 encoding is supported",
-                            encoding,
-                        ))
-                        .context(path);
+                        parse_error!(encoding, "Only UTF-8 encoding is supported")
                     }
                 }
                 if let Some(standalone) = standalone {
                     if !standalone {
-                        return Err(ParseError::new("\"standalone\" must be \"yes\"", span))
-                            .context(path);
+                        parse_error!(span, "\"standalone\" must be \"yes\"")
                     }
                 }
             }
             DtdStart { span, .. } => {
-                return Err(ParseError::new(
-                    "Document type definitions are not supported",
-                    span,
-                ))
-                .context(path);
+                parse_error!(span, "Document type definitions are not supported")
             }
             DtdEnd { .. } => unreachable!(),
             EmptyDtd { span, .. } => {
-                return Err(ParseError::new(
-                    "Document type definitions are not supported",
-                    span,
-                ))
-                .context(path);
+                parse_error!(span, "Document type definitions are not supported")
             }
             EntityDeclaration { .. } => unreachable!(),
-            Cdata { span, .. } => {
-                return Err(ParseError::new("CDATA sections are not supported", span))
-                    .context(path);
-            }
+            Cdata { span, .. } => parse_error!(span, "CDATA sections are not supported"),
             ProcessingInstruction { span, .. } => {
-                return Err(ParseError::new(
-                    "Processing instructions are not supported",
-                    span,
-                ))
-                .context(path);
+                parse_error!(span, "Processing instructions are not supported")
             }
             Comment { .. } => { /* ignored */ }
             ElementStart {
@@ -204,12 +188,10 @@ pub fn load_scene(
                 local: name,
                 ..
             } => {
-                no_namespaces(prefix).context(path)?;
+                no_namespaces(prefix)?;
                 let new_element = match element_stack.last_mut() {
-                    Some((parent, parent_span)) => parent
-                        .open_child_element(name, *parent_span)
-                        .context(path)?,
-                    None => Box::new(AsdfElement::new(name).context(path)?),
+                    Some((parent, parent_span)) => parent.open_child_element(name, *parent_span)?,
+                    None => Box::new(AsdfElement::new(name)?),
                 };
                 element_stack.push((new_element, name));
             }
@@ -219,13 +201,9 @@ pub fn load_scene(
                 value,
                 ..
             } => {
-                no_namespaces(prefix).context(path)?;
+                no_namespaces(prefix)?;
                 if attributes.iter().any(|&(k, _)| k.as_str() == name.as_str()) {
-                    return Err(ParseError::new(
-                        format!("Duplicate attribute {:?}", name.as_str()),
-                        name,
-                    ))
-                    .context(path);
+                    parse_error!(name, "Duplicate attribute {:?}", name.as_str())
                 }
                 attributes.push((name, value));
             }
@@ -234,76 +212,53 @@ pub fn load_scene(
                 match end {
                     Open => {
                         let (element, span) = element_stack.last_mut().unwrap();
-                        element
-                            .parse_attributes(&mut attributes, *span, &mut scene)
-                            .context(path)?;
+                        element.parse_attributes(&mut attributes, *span, &mut scene)?;
                     }
                     Close(prefix, name) => {
-                        no_namespaces(prefix).context(path)?;
+                        no_namespaces(prefix)?;
                         let (element, span) = element_stack.pop().unwrap();
                         if name.as_str() != span.as_str() {
-                            return Err(ParseError::new(
-                                format!(
-                                    "Non-matching closing tag </{}> (expected </{}>)",
-                                    name.as_str(),
-                                    span.as_str()
-                                ),
+                            parse_error!(
                                 name,
-                            ))
-                            .context(path);
+                                "Non-matching closing tag </{}> (expected </{}>)",
+                                name.as_str(),
+                                span.as_str()
+                            )
                         }
                         if let Some((parent, _)) = element_stack.last_mut() {
-                            element
-                                .close(name, Some(parent), &mut scene)
-                                .context(path)?;
+                            element.close(name, Some(parent), &mut scene)?;
                         } else {
-                            element.close(name, None, &mut scene).context(path)?;
+                            element.close(name, None, &mut scene)?;
                         }
                         assert!(attributes.is_empty());
                     }
                     Empty => {
                         let (mut element, span) = element_stack.pop().unwrap();
-                        element
-                            .parse_attributes(&mut attributes, span, &mut scene)
-                            .context(path)?;
+                        element.parse_attributes(&mut attributes, span, &mut scene)?;
                         if let Some((parent, _)) = element_stack.last_mut() {
-                            element
-                                .close(span, Some(parent), &mut scene)
-                                .context(path)?;
+                            element.close(span, Some(parent), &mut scene)?;
                         } else {
-                            element.close(span, None, &mut scene).context(path)?;
+                            element.close(span, None, &mut scene)?;
                         }
                     }
                 }
                 if let Some(&(name, _)) = attributes.first() {
-                    return Err(ParseError::new(
-                        format!("Attribute {:?} is not allowed", name.as_str()),
-                        name,
-                    ))
-                    .context(path);
+                    parse_error!(name, "Attribute {:?} is not allowed", name.as_str())
                 }
             }
             Text { text } => {
                 if !text.as_str().trim().is_empty() {
-                    return Err(ParseError::new("No text content allowed", text)).context(path);
+                    parse_error!(text, "No text content allowed")
                 }
             }
         }
     }
     if let Some((_, span)) = element_stack.last() {
-        return Err(ParseError::new(
-            format!("Missing </{}> tag", span.as_str()),
-            *span,
-        ))
-        .context(path);
+        parse_error!(*span, "Missing </{}> tag", span.as_str())
     }
     if scene.streamer.is_none() {
         // See https://github.com/RazrFalcon/xmlparser/issues/8
-        return Err(ParseError::new(
-            "Missing XML root element",
-            file_data.as_str().into(),
-        ))
-        .context(path);
+        parse_error!(file_data.as_str().into(), "Missing XML root element")
     }
 
     let mut transformer_activity = Vec::new();
@@ -328,17 +283,14 @@ pub fn load_scene(
             if (idx > 0 && activity[idx - 1].1 > begin)
                 || (idx < activity.len() && activity[idx].0 < end)
             {
-                return Err(ParseError::new(
-                    format!(
-                        "Clip overlap in source \"{}\"",
-                        scene.sources[source_idx]
-                            .id
-                            .as_ref()
-                            .expect("Overlap cannot happen in sources without ID")
-                    ),
+                parse_error!(
                     span,
-                ))
-                .context(path);
+                    "Clip overlap in source \"{}\"",
+                    scene.sources[source_idx]
+                        .id
+                        .as_ref()
+                        .expect("Overlap cannot happen in sources without ID")
+                )
             }
             activity.insert(idx, (begin, end, transform_idx))
         }
@@ -436,19 +388,13 @@ impl<'a> SceneInitializer<'a> {
         }
         let id = value.to_string();
         if id == REFERENCE_ID {
-            return Err(ParseError::new(
-                format!("Reserved ID: \"{}\"", REFERENCE_ID),
-                value,
-            ));
+            parse_error!(value, "Reserved ID: \"{}\"", REFERENCE_ID)
         }
         if !RE.is_match(&id) {
-            return Err(ParseError::new(
-                format!("Invalid XML ID: \"{}\"", id),
-                value,
-            ));
+            parse_error!(value, "Invalid XML ID: \"{}\"", id)
         }
         if !self.all_ids.insert(id.clone()) {
-            return Err(ParseError::new(format!("Non-unique ID: \"{}\"", id), value));
+            parse_error!(value, "Non-unique ID: \"{}\"", id)
         }
         Ok(id)
     }

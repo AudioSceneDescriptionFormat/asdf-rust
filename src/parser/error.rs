@@ -2,9 +2,10 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::iter;
-use std::path::{Path, PathBuf};
 
 use xmlparser as xml;
+
+use asdfspline::Scalar;
 
 use crate::audiofile::dynamic::LoadError as AudioFileLoadError;
 use crate::error::FromSourceAndContext;
@@ -95,60 +96,15 @@ impl fmt::Display for ParseError {
 
 impl Error for ParseError {}
 
-#[derive(Debug)]
-pub struct LoadError {
-    path: PathBuf,
-    kind: LoadErrorKind,
-}
-
-#[derive(Debug)]
-pub enum LoadErrorKind {
-    ReadFile(io::Error),
-    Tokenize(xml::Error),
-    Parse(ParseError),
-}
-
-impl fmt::Display for LoadError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use LoadErrorKind::*;
-        match &self.kind {
-            ReadFile(e) => write!(f, "Error reading {:?}: {}", self.path, e),
-            // TODO: Show offending lines with TextPos (row/col)?
-            Tokenize(e) => write!(f, "Error tokenizing {:?}: {}", self.path, e),
-            Parse(e) => write!(f, "Error parsing {:?}: {}", self.path, e),
-        }
-    }
-}
-
-impl Error for LoadError {
-    // TODO: source()?
-}
-
-impl FromSourceAndContext<io::Error, &Path> for LoadError {
-    fn from_source_and_context(source: io::Error, context: &Path) -> LoadError {
-        LoadError {
-            path: context.into(),
-            kind: LoadErrorKind::ReadFile(source),
-        }
-    }
-}
-
-impl FromSourceAndContext<xml::Error, &Path> for LoadError {
-    fn from_source_and_context(source: xml::Error, context: &Path) -> LoadError {
-        LoadError {
-            path: context.into(),
-            kind: LoadErrorKind::Tokenize(source),
-        }
-    }
-}
-
-impl FromSourceAndContext<ParseError, &Path> for LoadError {
-    fn from_source_and_context(source: ParseError, context: &Path) -> LoadError {
-        LoadError {
-            path: context.into(),
-            kind: LoadErrorKind::Parse(source),
-        }
-    }
+#[derive(thiserror::Error, Debug)]
+pub enum LoadError {
+    #[error("Error reading scene file")]
+    ReadFile(#[from] io::Error),
+    // TODO: Show offending lines with TextPos (row/col)?
+    #[error("Error tokenizing XML")]
+    Tokenize(#[from] xml::Error),
+    #[error("Error parsing ASDF")]
+    Parse(#[from] ParseError),
 }
 
 #[derive(Debug)]
@@ -199,8 +155,13 @@ impl FromSourceAndContext<std::num::ParseFloatError, xml::StrSpan<'_>> for Parse
     }
 }
 
-impl FromSourceAndContext<asdfspline::Error, xml::StrSpan<'_>> for ParseError {
-    fn from_source_and_context(source: asdfspline::Error, context: xml::StrSpan) -> ParseError {
+impl<S: Scalar> FromSourceAndContext<asdfspline::asdfspline::Error<S>, xml::StrSpan<'_>>
+    for ParseError
+{
+    fn from_source_and_context(
+        source: asdfspline::asdfspline::Error<S>,
+        context: xml::StrSpan,
+    ) -> ParseError {
         ParseError::new(format!("Error creating ASDF spline: {}", source), context)
     }
 }
