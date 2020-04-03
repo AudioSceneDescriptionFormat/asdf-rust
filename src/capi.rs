@@ -4,7 +4,6 @@
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::fmt::Display;
-use std::panic::{catch_unwind, AssertUnwindSafe, UnwindSafe};
 use std::time::Duration;
 
 use libc::c_char;
@@ -85,22 +84,26 @@ pub unsafe extern "C" fn asdf_scene_new(
     buffer_blocks: u32,
     usleeptime: u64,
 ) -> *mut Scene {
-    handle_errors(
-        || {
-            let filename = CStr::from_ptr(filename).to_str().unwrap_display();
-            Box::into_raw(Box::new(
-                Scene::new(
-                    filename,
-                    samplerate,
-                    blocksize,
-                    buffer_blocks,
-                    Duration::from_micros(usleeptime),
-                )
-                .unwrap_display(),
-            ))
-        },
-        std::ptr::null_mut(),
-    )
+    let filename = match CStr::from_ptr(filename).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            set_error(format!("Invalid filename: {}", e));
+            return std::ptr::null_mut();
+        }
+    };
+    match Scene::new(
+        filename,
+        samplerate,
+        blocksize,
+        buffer_blocks,
+        Duration::from_micros(usleeptime),
+    ) {
+        Ok(scene) => Box::into_raw(Box::new(scene)),
+        Err(e) => {
+            set_error(e);
+            std::ptr::null_mut()
+        }
+    }
 }
 
 #[no_mangle]
@@ -168,22 +171,16 @@ pub unsafe extern "C" fn asdf_scene_get_audio_data(
     data: *const *mut f32,
     rolling: bool,
 ) -> bool {
-    // TODO: remove AssertUnwindSafe once ring buffer is UnwindSafe
-    handle_errors(
-        AssertUnwindSafe(|| {
-            assert!(!ptr.is_null());
-            let scene = &mut *ptr;
-            assert!(!data.is_null());
-            let data = std::slice::from_raw_parts(data, scene.file_sources() as usize);
-            let success = scene.get_audio_data(data, rolling);
-            if !success {
-                // TODO: get more error details from streamer
-                set_error("Unrecoverable error getting audio file data");
-            }
-            success
-        }),
-        false,
-    )
+    assert!(!ptr.is_null());
+    let scene = &mut *ptr;
+    assert!(!data.is_null());
+    let data = std::slice::from_raw_parts(data, scene.file_sources() as usize);
+    let success = scene.get_audio_data(data, rolling);
+    if !success {
+        // TODO: get more error details from streamer
+        set_error("Unrecoverable error getting audio file data");
+    }
+    success
 }
 
 /// The error message will be freed if another error occurs. It is the caller's
@@ -202,36 +199,4 @@ fn set_error<D: Display>(error: D) {
     LAST_ERROR.with(|cell| {
         *cell.borrow_mut() = CString::new(error.to_string()).unwrap();
     });
-}
-
-fn handle_errors<F, T>(f: F, optb: T) -> T
-where
-    F: FnOnce() -> T + UnwindSafe,
-{
-    match catch_unwind(f) {
-        Ok(value) => value,
-        Err(e) => {
-            if let Some(e) = e.downcast_ref::<&str>() {
-                set_error(*e);
-            } else if let Some(e) = e.downcast_ref::<String>() {
-                set_error(e);
-            } else {
-                set_error("unknown error");
-            }
-            optb
-        }
-    }
-}
-
-trait ResultExt<T, E: Display> {
-    fn unwrap_display(self) -> T;
-}
-
-impl<T, E: Display> ResultExt<T, E> for Result<T, E> {
-    fn unwrap_display(self) -> T {
-        match self {
-            Ok(value) => value,
-            Err(e) => panic!(e.to_string()),
-        }
-    }
 }
