@@ -3,14 +3,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use asdfspline::AsdfSpline;
+use asdfspline::{AsdfPosSpline, NormWrapper, Spline};
 use regex::Regex;
 use superslice::Ext; // for slice::lower_bound_by_key()
 use xmlparser as xml;
 
 use crate::audiofile::dynamic::AudioFile;
 use crate::streamer::FileStreamer;
-use crate::transform::{get_length, Transform, Vec3};
+use crate::transform::{Transform, Vec3};
 use crate::{Scene, Source, Transformer, REFERENCE_ID};
 
 mod elements;
@@ -98,9 +98,17 @@ impl Transformer for ConstantTransformer {
     }
 }
 
+struct Norm3;
+
+impl NormWrapper<Norm3> for Vec3 {
+    fn norm(&self) -> f32 {
+        self.norm()
+    }
+}
+
 struct SplineTransformer {
     id: Option<String>,
-    spline: AsdfSpline<f32, Vec3>,
+    spline: AsdfPosSpline<Vec3, Norm3>,
     samplerate: u32,
 }
 
@@ -112,7 +120,7 @@ impl Transformer for SplineTransformer {
     fn get_transform(&self, frame: u64) -> Transform {
         let time = frames2seconds(frame, self.samplerate).0;
         Transform {
-            translation: Some(self.spline.evaluate(time, get_length)),
+            translation: Some(self.spline.evaluate(time)),
             // TODO: proper rotation
             rotation: None,
         }

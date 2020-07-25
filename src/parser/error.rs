@@ -5,8 +5,6 @@ use std::iter;
 
 use xmlparser as xml;
 
-use asdfspline::Scalar;
-
 use crate::audiofile::dynamic::LoadError as AudioFileLoadError;
 use crate::error::FromSourceAndContext;
 
@@ -155,11 +153,9 @@ impl FromSourceAndContext<std::num::ParseFloatError, xml::StrSpan<'_>> for Parse
     }
 }
 
-impl<S: Scalar> FromSourceAndContext<asdfspline::asdfspline::Error<S>, xml::StrSpan<'_>>
-    for ParseError
-{
+impl FromSourceAndContext<asdfspline::asdfposspline::Error, xml::StrSpan<'_>> for ParseError {
     fn from_source_and_context(
-        source: asdfspline::asdfspline::Error<S>,
+        source: asdfspline::asdfposspline::Error,
         context: xml::StrSpan,
     ) -> ParseError {
         ParseError::new(format!("Error creating ASDF spline: {}", source), context)

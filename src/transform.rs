@@ -9,10 +9,6 @@ use crate::parser::Attributes;
 pub type Vec3 = nalgebra::Vector3<f32>;
 pub type Quat = nalgebra::UnitQuaternion<f32>;
 
-pub fn get_length(v: Vec3) -> f32 {
-    v.norm()
-}
-
 #[derive(Clone, Default)]
 pub struct Transform {
     // NB: There must be a well-defined order of operations, i.e.

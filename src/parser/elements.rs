@@ -3,13 +3,13 @@ use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use asdfspline::AsdfSpline;
+use asdfspline::AsdfPosSpline;
 use xmlparser as xml;
 
 use crate::audiofile::dynamic::{load_audio_file, AudioFile};
 use crate::error::ResultExt;
 use crate::streamer::FileStreamer;
-use crate::transform::{get_length, parse_pos, parse_transform, Transform, Vec3};
+use crate::transform::{parse_pos, parse_transform, Transform, Vec3};
 use crate::{Source, Transformer, REFERENCE_ID};
 
 use super::error::ParseError;
@@ -1009,7 +1009,7 @@ impl<'a> Element<'a> for TransformElement {
                 .collect();
             Box::new(SplineTransformer {
                 id: self.id,
-                spline: AsdfSpline::new(&positions, &times, &speeds, &tcb, closed, get_length)
+                spline: AsdfPosSpline::new(&positions, &times, &speeds, &tcb, closed)
                     .context(span)?,
                 samplerate: scene.samplerate,
             }) as Box<dyn Transformer>
