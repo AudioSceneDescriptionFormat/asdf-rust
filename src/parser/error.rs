@@ -1,14 +1,10 @@
-use std::error::Error;
-use std::fmt;
 use std::io;
 use std::iter;
 
 use xmlparser as xml;
 
-use crate::audiofile::dynamic::LoadError as AudioFileLoadError;
-use crate::error::FromSourceAndContext;
-
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
+#[error("{msg}\n---{context}")]
 pub struct ParseError {
     msg: String,
     context: String,
@@ -86,78 +82,10 @@ impl ParseError {
     }
 }
 
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}\n---{}", self.msg, self.context)
-    }
-}
-
-impl Error for ParseError {}
-
 #[derive(thiserror::Error, Debug)]
+#[error(transparent)]
 pub enum LoadError {
-    #[error("Error reading scene file")]
     ReadFile(#[from] io::Error),
-    // TODO: Show offending lines with TextPos (row/col)?
-    #[error("Error tokenizing XML")]
     Tokenize(#[from] xml::Error),
-    #[error("Error parsing ASDF")]
     Parse(#[from] ParseError),
-}
-
-#[derive(Debug)]
-pub struct ParseSecondsError {
-    // TODO
-}
-
-impl fmt::Display for ParseSecondsError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO:
-        write!(f, "TODO: parse seconds error")
-    }
-}
-
-impl FromSourceAndContext<ParseSecondsError, xml::StrSpan<'_>> for ParseError {
-    fn from_source_and_context(source: ParseSecondsError, context: xml::StrSpan) -> ParseError {
-        ParseError::new(format!("Invalid time value: {}", source), context)
-    }
-}
-
-impl FromSourceAndContext<AudioFileLoadError, xml::StrSpan<'_>> for ParseError {
-    fn from_source_and_context(source: AudioFileLoadError, context: xml::StrSpan) -> ParseError {
-        ParseError::new(format!("{}", source), context)
-    }
-}
-
-impl FromSourceAndContext<std::num::ParseIntError, xml::StrSpan<'_>> for ParseError {
-    fn from_source_and_context(
-        source: std::num::ParseIntError,
-        context: xml::StrSpan,
-    ) -> ParseError {
-        ParseError::new(
-            format!("Error parsing attribute as positive integer: {}", source),
-            context,
-        )
-    }
-}
-
-impl FromSourceAndContext<std::num::ParseFloatError, xml::StrSpan<'_>> for ParseError {
-    fn from_source_and_context(
-        source: std::num::ParseFloatError,
-        context: xml::StrSpan,
-    ) -> ParseError {
-        ParseError::new(
-            format!("Error parsing attribute as decimal value(s): {}", source),
-            context,
-        )
-    }
-}
-
-impl FromSourceAndContext<asdfspline::asdfposspline::Error, xml::StrSpan<'_>> for ParseError {
-    fn from_source_and_context(
-        source: asdfspline::asdfposspline::Error,
-        context: xml::StrSpan,
-    ) -> ParseError {
-        ParseError::new(format!("Error creating ASDF spline: {}", source), context)
-    }
 }

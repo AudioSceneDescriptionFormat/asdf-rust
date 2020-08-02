@@ -7,7 +7,6 @@ use asdfspline::AsdfPosSpline;
 use xmlparser as xml;
 
 use crate::audiofile::dynamic::{load_audio_file, AudioFile};
-use crate::error::ResultExt;
 use crate::streamer::FileStreamer;
 use crate::transform::{parse_pos, parse_transform, Transform, Vec3};
 use crate::{Source, Transformer, REFERENCE_ID};
@@ -408,7 +407,7 @@ impl<'a> Element<'a> for SeqElement {
         _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(repeat_value) = attributes.get_value("repeat") {
-            self.iterations = NonZeroU64::from_str(repeat_value.as_str()).context(repeat_value)?;
+            self.iterations = parse_attribute(repeat_value)?;
         }
         Ok(())
     }
@@ -498,7 +497,7 @@ impl<'a> Element<'a> for ParElement {
         _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(repeat_value) = attributes.get_value("repeat") {
-            self.iterations = NonZeroU64::from_str(repeat_value.as_str()).context(repeat_value)?;
+            self.iterations = parse_attribute(repeat_value)?;
         }
         Ok(())
     }
@@ -599,7 +598,7 @@ impl<'a> Element<'a> for ClipElement {
         // TODO: allow other source models (e.g. binaural, ambisonics, ...)
 
         let iterations = if let Some(repeat_value) = attributes.get_value("repeat") {
-            NonZeroU64::from_str(repeat_value.as_str()).context(repeat_value)?
+            parse_attribute(repeat_value)?
         } else {
             NonZeroU64::new(1).unwrap()
         };
@@ -614,8 +613,11 @@ impl<'a> Element<'a> for ClipElement {
                 path = scene.dir.join(path);
             }
 
-            self.file =
-                Some(load_audio_file(path, scene.samplerate, iterations).context(file_value)?);
+            self.file = Some(
+                load_audio_file(path, scene.samplerate, iterations).map_err(|e| {
+                    ParseError::new(format!("error loading audio file: {}", e), file_value)
+                })?,
+            );
         } else {
             return Err(ParseError::new(
                 "\"file\" attribute is required in <clip> element",
@@ -774,7 +776,7 @@ impl<'a> Element<'a> for ChannelElement {
         scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(skip) = attributes.get_value("skip") {
-            self.skip = Some(skip.as_str().parse().context(skip)?);
+            self.skip = Some(parse_attribute(skip)?);
             if let Some(&(name, _)) = attributes.first() {
                 return Err(ParseError::new(
                     "No further attributes are allowed in <channel> if \"skip\" is given",
@@ -1009,8 +1011,9 @@ impl<'a> Element<'a> for TransformElement {
                 .collect();
             Box::new(SplineTransformer {
                 id: self.id,
-                spline: AsdfPosSpline::new(&positions, &times, &speeds, &tcb, closed)
-                    .context(span)?,
+                spline: AsdfPosSpline::new(&positions, &times, &speeds, &tcb, closed).map_err(
+                    |e| ParseError::new(format!("Error creating ASDF spline: {}", e), span),
+                )?,
                 samplerate: scene.samplerate,
             }) as Box<dyn Transformer>
         };
@@ -1051,7 +1054,7 @@ impl<'a> Element<'a> for TransformNodeElement {
         _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(time_value) = attributes.get_value("time") {
-            self.time = Some(Seconds::from_str(time_value.as_str()).context(time_value)?);
+            self.time = Some(parse_attribute(time_value)?);
         }
         let mut position = None;
         if let Some(pos_value) = attributes.get_value("pos") {
@@ -1076,7 +1079,7 @@ impl<'a> Element<'a> for TransformNodeElement {
                 ));
             }
             // TODO: disallow negative values?
-            self.speed = Some(f32::from_str(speed_value.as_str()).context(speed_value)?);
+            self.speed = Some(parse_attribute(speed_value)?);
         }
         // TODO: code re-use?
         if let Some((tension_key, tension_value)) = attributes.get_item("tension") {
@@ -1086,7 +1089,7 @@ impl<'a> Element<'a> for TransformNodeElement {
                     tension_key,
                 ));
             }
-            self.tension = Some(f32::from_str(tension_value.as_str()).context(tension_value)?);
+            self.tension = Some(parse_attribute(tension_value)?);
         }
         if let Some((continuity_key, continuity_value)) = attributes.get_item("continuity") {
             if self.closed {
@@ -1095,8 +1098,7 @@ impl<'a> Element<'a> for TransformNodeElement {
                     continuity_key,
                 ));
             }
-            self.continuity =
-                Some(f32::from_str(continuity_value.as_str()).context(continuity_value)?);
+            self.continuity = Some(parse_attribute(continuity_value)?);
         }
         if let Some((bias_key, bias_value)) = attributes.get_item("bias") {
             if self.closed {
@@ -1105,7 +1107,7 @@ impl<'a> Element<'a> for TransformNodeElement {
                     bias_key,
                 ));
             }
-            self.bias = Some(f32::from_str(bias_value.as_str()).context(bias_value)?);
+            self.bias = Some(parse_attribute(bias_value)?);
         }
 
         if !self.closed && self.transform.translation.is_none() {
@@ -1155,5 +1157,59 @@ fn child_in_container<'a>(
             ),
             name,
         )),
+    }
+}
+
+/// Convenience function for automatic deduction of return type.
+fn parse_attribute<T>(span: xml::StrSpan) -> Result<T, ParseError>
+where
+    T: ParseAttribute,
+{
+    T::parse_attribute(span)
+}
+
+trait ParseAttribute {
+    fn parse_attribute(span: xml::StrSpan) -> Result<Self, ParseError>
+    where
+        Self: Sized;
+}
+
+impl ParseAttribute for NonZeroU64 {
+    fn parse_attribute(span: xml::StrSpan) -> Result<Self, ParseError> {
+        NonZeroU64::from_str(span.as_str()).map_err(|e| {
+            ParseError::new(
+                format!("error parsing attribute as positive integer: {}", e),
+                span,
+            )
+        })
+    }
+}
+
+impl ParseAttribute for u32 {
+    fn parse_attribute(span: xml::StrSpan) -> Result<Self, ParseError> {
+        u32::from_str(span.as_str()).map_err(|e| {
+            ParseError::new(
+                format!("error parsing attribute as non-negative integer: {}", e),
+                span,
+            )
+        })
+    }
+}
+
+impl ParseAttribute for f32 {
+    fn parse_attribute(span: xml::StrSpan) -> Result<Self, ParseError> {
+        f32::from_str(span.as_str()).map_err(|e| {
+            ParseError::new(
+                format!("error parsing attribute as decimal value(s): {}", e),
+                span,
+            )
+        })
+    }
+}
+
+impl ParseAttribute for Seconds {
+    fn parse_attribute(span: xml::StrSpan) -> Result<Self, ParseError> {
+        Seconds::from_str(span.as_str())
+            .map_err(|e| ParseError::new(format!("invalid time value: {}", e), span))
     }
 }

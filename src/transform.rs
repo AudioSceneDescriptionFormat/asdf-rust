@@ -2,7 +2,6 @@ use std::str::FromStr;
 
 use xmlparser as xml;
 
-use crate::error::ResultExt;
 use crate::parser::error::ParseError;
 use crate::parser::Attributes;
 
@@ -95,10 +94,10 @@ pub fn parse_transform<'a>(
 }
 
 pub fn parse_pos(value: xml::StrSpan) -> Result<Vec3, ParseError> {
-    let mut values = value
-        .as_str()
-        .split_whitespace()
-        .map(|s| f32::from_str(s).context(value));
+    let mut values = value.as_str().split_whitespace().map(|s| {
+        f32::from_str(s)
+            .map_err(|e| ParseError::new(format!("error parsing \"pos\" value(s): {}", e), value))
+    });
     let x = values.next().unwrap_or_else(|| {
         Err(ParseError::new(
             "At least 2 numbers are needed for \"pos\"",
@@ -122,10 +121,10 @@ pub fn parse_pos(value: xml::StrSpan) -> Result<Vec3, ParseError> {
 }
 
 pub fn parse_rot(value: xml::StrSpan) -> Result<Quat, ParseError> {
-    let mut values = value
-        .as_str()
-        .split_whitespace()
-        .map(|s| f32::from_str(s).context(value));
+    let mut values = value.as_str().split_whitespace().map(|s| {
+        f32::from_str(s)
+            .map_err(|e| ParseError::new(format!("error parsing \"rot\" value(s): {}", e), value))
+    });
     let azimuth = values.next().unwrap_or_else(|| {
         Err(ParseError::new(
             "At least 1 number is needed for \"rot\"",

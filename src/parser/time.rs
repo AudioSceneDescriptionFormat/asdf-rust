@@ -1,21 +1,19 @@
 use std::ops::{Add, AddAssign};
 use std::str::FromStr;
 
-use super::error::ParseSecondsError;
-
 #[derive(Clone, Copy, Default, PartialEq)]
 pub struct Seconds(pub f32);
+
+#[derive(thiserror::Error, Debug)]
+#[error("error parsing time string")]
+pub struct ParseSecondsError(#[from] std::num::ParseFloatError);
 
 impl FromStr for Seconds {
     type Err = ParseSecondsError;
 
     fn from_str(s: &str) -> Result<Self, ParseSecondsError> {
         // TODO: support more syntax
-        match f32::from_str(s) {
-            Ok(value) => Ok(Seconds(value)),
-            // TODO: add error info
-            Err(_) => Err(ParseSecondsError {}),
-        }
+        Ok(Seconds(f32::from_str(s)?))
     }
 }
 

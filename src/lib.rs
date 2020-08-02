@@ -45,7 +45,6 @@ use std::time::Duration;
 extern crate lazy_static;
 
 mod audiofile;
-mod error;
 mod parser;
 mod streamer;
 mod transform;

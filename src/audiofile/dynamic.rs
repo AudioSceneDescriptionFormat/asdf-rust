@@ -1,11 +1,8 @@
 use std::error::Error;
-use std::fmt;
 use std::fs;
 use std::io;
 use std::num::NonZeroU64;
-use std::path::{Path, PathBuf};
-
-use crate::error::{FromSourceAndContext, ResultExt};
+use std::path::Path;
 
 use super::converter;
 use super::vorbis;
@@ -40,67 +37,17 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LoadError {
-    path: PathBuf,
-    source: LoadErrorKind,
-}
-
-#[derive(Debug)]
-enum LoadErrorKind {
-    Open(io::Error),
+#[derive(thiserror::Error, Debug)]
+pub enum LoadError {
+    #[error("I/O error")]
+    Open(#[from] io::Error),
+    #[error("error decoding file:\ntrying Vorbis: {vorbis_error}\ntrying WAV: {wav_error}")]
     Decode {
         vorbis_error: vorbis::OpenError,
         wav_error: hound::Error,
     },
-    Resample(converter::LibSamplerateError),
-}
-
-impl fmt::Display for LoadError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use LoadErrorKind::*;
-        match &self.source {
-            Open(e) => write!(f, "Error opening {:?}: {}", self.path, e),
-            Decode {
-                vorbis_error,
-                wav_error,
-            } => write!(
-                f,
-                "Error decoding {:?}:\nTrying Vorbis: {}\nTrying WAV: {}",
-                self.path, vorbis_error, wav_error
-            ),
-            Resample(e) => write!(f, "Error parsing {:?}: {}", self.path, e),
-        }
-    }
-}
-
-impl Error for LoadError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        use LoadErrorKind::*;
-        match self.source {
-            Open(ref e) => Some(e),
-            Decode { .. } => None, // We have multiple underlying errors, TODO: ?
-            Resample(ref e) => Some(e),
-        }
-    }
-}
-
-impl FromSourceAndContext<io::Error, &Path> for LoadError {
-    fn from_source_and_context(source: io::Error, context: &Path) -> LoadError {
-        LoadError {
-            path: context.into(),
-            source: LoadErrorKind::Open(source),
-        }
-    }
-}
-
-impl FromSourceAndContext<converter::LibSamplerateError, &Path> for LoadError {
-    fn from_source_and_context(source: converter::LibSamplerateError, context: &Path) -> LoadError {
-        LoadError {
-            path: context.into(),
-            source: LoadErrorKind::Resample(source),
-        }
-    }
+    #[error("libsamplerate error")]
+    Resample(#[from] converter::LibSamplerateError),
 }
 
 pub fn load_audio_file<P>(
@@ -119,40 +66,34 @@ where
     // TODO: check if file exists (for nicer error message)? path.is_file()
 
     if path.is_dir() {
-        return Err(LoadError {
-            path: path.into(),
-            source: LoadErrorKind::Open(io::Error::new(
-                io::ErrorKind::Other,
-                "Path is a directory, not a file",
-            )),
-        });
+        return Err(LoadError::Open(io::Error::new(
+            io::ErrorKind::Other,
+            "path is a directory, not a file",
+        )));
     }
 
-    let file = fs::File::open(path).context(path)?;
+    let file = fs::File::open(path)?;
     let vorbis_error = match vorbis::File::new(file) {
         Ok(file) => {
-            return Ok(repeat_and_convert(file, iterations, samplerate).context(path)?);
+            return Ok(repeat_and_convert(file, iterations, samplerate)?);
         }
         Err(e) => e,
     };
 
-    let file = fs::File::open(path).context(path)?;
+    let file = fs::File::open(path)?;
     let reader = io::BufReader::new(file);
     let wav_error = match wav::File::new(reader) {
         Ok(file) => {
-            return Ok(repeat_and_convert(file, iterations, samplerate).context(path)?);
+            return Ok(repeat_and_convert(file, iterations, samplerate)?);
         }
         Err(e) => e,
     };
 
     // TODO: try more file types (FLAC, mp3, ...)
 
-    Err(LoadError {
-        path: path.into(),
-        source: LoadErrorKind::Decode {
-            vorbis_error,
-            wav_error,
-        },
+    Err(LoadError::Decode {
+        vorbis_error,
+        wav_error,
     })
 }
 
