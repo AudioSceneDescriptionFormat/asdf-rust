@@ -3,12 +3,12 @@ use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use asdfspline::AsdfPosSpline;
+use asdfspline::{AsdfPosSpline, AsdfRotSpline};
 use xmlparser as xml;
 
 use crate::audiofile::dynamic::{load_audio_file, AudioFile};
 use crate::streamer::FileStreamer;
-use crate::transform::{parse_pos, parse_transform, Transform, Vec3};
+use crate::transform::{parse_pos, parse_rot, parse_transform, Transform, Vec3};
 use crate::{Source, Transformer, REFERENCE_ID};
 
 use super::error::ParseError;
@@ -914,9 +914,9 @@ impl<'a> Element<'a> for TransformElement {
                     span,
                 ));
             }
-            if node.closed {
+            if node.closed_pos || node.closed_rot {
                 return Err(ParseError::new(
-                    "pos=\"closed\" is not allowed with a single transform node",
+                    "pos=\"closed\" and rot=\"closed\" are not allowed with a single transform node",
                     span,
                 ));
             }
@@ -926,37 +926,64 @@ impl<'a> Element<'a> for TransformElement {
             }) as Box<dyn Transformer>
         } else {
             let mut positions = Vec::<Vec3>::new();
-            let mut times = Vec::<Option<f32>>::new();
+            let mut rotations = Vec::new();
+            let mut times_pos = Vec::<Option<f32>>::new();
+            let mut times_rot = Vec::<Option<f32>>::new();
             let mut speeds = Vec::<Option<f32>>::new();
-            let mut tensions = Vec::<Option<f32>>::new();
-            let mut continuities = Vec::<Option<f32>>::new();
-            let mut biases = Vec::<Option<f32>>::new();
-            let mut closed = false;
+            let mut tcb_pos = Vec::<[f32; 3]>::new();
+            let mut tcb_rot = Vec::<[f32; 3]>::new();
+            let mut closed_pos = false;
+            let mut closed_rot = false;
 
-            for node in self.nodes {
-                times.push(node.time.map(|t| t.0));
-                if node.closed {
-                    // This was checked during parsing:
-                    assert!(node.speed.is_none());
+            for node in &self.nodes {
+                let time = node.time.map(|t| t.0);
+
+                if node.closed_pos && node.closed_rot {
+                    // This has been checked during parsing:
                     assert!(node.tension.is_none());
                     assert!(node.continuity.is_none());
                     assert!(node.bias.is_none());
-                    assert!(!closed);
-                    closed = true;
-                } else {
-                    let position = node.transform.translation;
-                    // TODO: remove this requirement
-                    assert!(position.is_some());
-                    positions.push(position.unwrap());
-                    speeds.push(node.speed);
-                    tensions.push(node.tension);
-                    continuities.push(node.continuity);
-                    biases.push(node.bias);
                 }
 
-                // TODO: handle rotation, volume, ...
+                let tcb = [
+                    node.tension.unwrap_or_default(),
+                    node.continuity.unwrap_or_default(),
+                    node.bias.unwrap_or_default(),
+                ];
+
+                if node.closed_pos {
+                    // This has been checked during parsing:
+                    assert!(node.speed.is_none());
+                    assert!(!closed_pos);
+                    assert!(!closed_rot);
+                    closed_pos = true;
+                    times_pos.push(time);
+                } else if let Some(position) = node.transform.translation {
+                    times_pos.push(time);
+                    positions.push(position);
+                    speeds.push(node.speed);
+                    tcb_pos.push(tcb);
+                } else {
+                    assert!(node.speed.is_none());
+                }
+
+                if node.closed_rot {
+                    assert!(!closed_pos);
+                    assert!(!closed_rot);
+                    closed_rot = true;
+                    times_rot.push(time);
+                } else if let Some(rotation) = node.transform.rotation {
+                    times_rot.push(time);
+                    rotations.push(rotation);
+                    tcb_rot.push(tcb);
+                }
+
+                // TODO: handle volume, ...
             }
-            if let Some(last_time) = times.last().unwrap() {
+
+            // NB: if non-empty: first and last pos/rot must be given (checked in ASDF lib)
+
+            if let Some(last_time) = self.nodes.last().unwrap().time {
                 if self.duration.is_some() {
                     return Err(ParseError::new(
                         "Last node cannot have \"time\" \
@@ -965,18 +992,24 @@ impl<'a> Element<'a> for TransformElement {
                     ));
                 }
                 // TODO: handle "begin" time?
-                self.duration = Some(Seconds(*last_time));
+                self.duration = Some(last_time);
             } else {
-                *times.last_mut().unwrap() = if self.duration.is_some() {
+                let last_time = if self.duration.is_some() {
                     self.duration.map(|t| t.0)
                 } else if let Some(duration_frames) = parent_duration_frames {
                     Some(frames2seconds(duration_frames, scene.samplerate).0)
                 } else {
                     return Err(ParseError::new("Unable to infer time of last node", span));
                 };
+                if let [.., last] = &mut times_pos[..] {
+                    *last = last_time;
+                }
+                if let [.., last] = &mut times_rot[..] {
+                    *last = last_time;
+                }
             }
-            if let &Some(first_time) = times.first().unwrap() {
-                if first_time != 0.0 {
+            if let Some(first_time) = self.nodes.first().unwrap().time {
+                if first_time != Seconds(0.0) {
                     // TODO: This is a temporary restriction until "begin" semantics are sorted out:
                     return Err(ParseError::new(
                         "The first <transform> node is not allowed to have a time != 0 (for now)",
@@ -984,45 +1017,75 @@ impl<'a> Element<'a> for TransformElement {
                     ));
                 }
             } else {
-                times[0] = Some(0.0);
+                if let [first, ..] = &mut times_pos[..] {
+                    *first = Some(0.0);
+                }
+                if let [first, ..] = &mut times_rot[..] {
+                    *first = Some(0.0);
+                }
             }
-            if !closed {
-                if tensions.remove(0).is_some()
-                    || continuities.remove(0).is_some()
-                    || biases.remove(0).is_some()
+            if (positions.is_empty() || !closed_pos) && (rotations.is_empty() || !closed_rot) {
+                // NB: if both are empty, no TCB values should exist at all
+                let first_node = self.nodes.first().unwrap();
+                if first_node.tension.is_some()
+                    || first_node.continuity.is_some()
+                    || first_node.bias.is_some()
                 {
                     return Err(ParseError::new(
                         "tension/continuity/bias are not allowed in the first node \
-                         (except if pos=\"closed\")",
+                         (except if pos=\"closed\" or rot=\"closed\")",
                         span,
                     ));
                 }
-                if tensions.pop().unwrap().is_some()
-                    || continuities.pop().unwrap().is_some()
-                    || biases.pop().unwrap().is_some()
+                let last_node = self.nodes.last().unwrap();
+                if last_node.tension.is_some()
+                    || last_node.continuity.is_some()
+                    || last_node.bias.is_some()
                 {
+                    // NB: they are not allowed in closed curves either
                     return Err(ParseError::new(
                         "tension/continuity/bias are not allowed in the last node",
                         span,
                     ));
                 }
             }
-            assert!(tensions.len() == continuities.len());
-            assert!(tensions.len() == biases.len());
-            let tcb: Vec<_> = (0..tensions.len())
-                .map(|i| {
-                    [
-                        tensions[i].unwrap_or_default(),
-                        continuities[i].unwrap_or_default(),
-                        biases[i].unwrap_or_default(),
-                    ]
-                })
-                .collect();
+            if !tcb_pos.is_empty() && !closed_pos {
+                tcb_pos.remove(0);
+                tcb_pos.pop();
+            }
+            if !tcb_rot.is_empty() && !closed_rot {
+                tcb_rot.remove(0);
+                tcb_rot.pop();
+            }
             Box::new(SplineTransformer {
                 id: self.id,
-                spline: AsdfPosSpline::new(&positions, &times, &speeds, &tcb, closed).map_err(
-                    |e| ParseError::new(format!("Error creating ASDF spline: {}", e), span),
-                )?,
+                pos_spline: if positions.is_empty() {
+                    None
+                } else {
+                    Some(
+                        AsdfPosSpline::new(positions, times_pos, speeds, tcb_pos, closed_pos)
+                            .map_err(|e| {
+                                ParseError::new(
+                                    format!("Error creating ASDF position spline: {}", e),
+                                    span,
+                                )
+                            })?,
+                    )
+                },
+                rot_spline: if rotations.is_empty() {
+                    None
+                } else {
+                    Some(
+                        AsdfRotSpline::new(rotations, times_rot, tcb_rot, closed_rot).map_err(
+                            |e| {
+                                ParseError::new(
+                                    format!("Error creating ASDF rotations spline: {}", e),
+                                    span,
+                                )
+                            },
+                        )?,
+                    )
+                },
                 samplerate: scene.samplerate,
             }) as Box<dyn Transformer>
         };
@@ -1047,7 +1110,8 @@ impl<'a> Element<'a> for TransformElement {
 #[derive(Default)]
 struct TransformNodeElement {
     time: Option<Seconds>,
-    closed: bool,
+    closed_pos: bool,
+    closed_rot: bool,
     transform: Transform,
     speed: Option<f32>,
     tension: Option<f32>,
@@ -1062,6 +1126,9 @@ impl<'a> Element<'a> for TransformNodeElement {
         span: xml::StrSpan,
         _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
+        if attributes.is_empty() {
+            return Err(ParseError::new("empty <o> elements are not allowed", span));
+        }
         if let Some(time_value) = attributes.get_value("time") {
             let time = parse_attribute(time_value)?;
             if time < Seconds(0.0) {
@@ -1072,62 +1139,94 @@ impl<'a> Element<'a> for TransformNodeElement {
             }
             self.time = Some(time);
         }
-        let mut position = None;
+        let mut pos = None;
         if let Some(pos_value) = attributes.get_value("pos") {
-            // TODO: allow flanking whitespace?
             if pos_value.as_str() == "closed" {
-                self.closed = true;
+                self.closed_pos = true;
             } else {
-                position = Some(parse_pos(pos_value)?);
+                pos = Some(parse_pos(pos_value)?);
+            }
+        }
+        let mut rot = None;
+        if let Some(rot_value) = attributes.get_value("rot") {
+            if rot_value.as_str() == "closed" {
+                self.closed_rot = true;
+            } else {
+                rot = Some(parse_rot(rot_value)?);
             }
         }
         self.transform = parse_transform(attributes)?.unwrap_or_default();
-        if !self.closed && position.is_some() {
+        if !self.closed_pos && pos.is_some() {
             assert!(self.transform.translation.is_none());
-            self.transform.translation = position;
+            self.transform.translation = pos;
+        }
+        if !self.closed_rot && rot.is_some() {
+            assert!(self.transform.rotation.is_none());
+            self.transform.rotation = rot;
         }
 
         if let Some((speed_key, speed_value)) = attributes.get_item("speed") {
-            if self.closed {
+            if self.closed_pos {
                 return Err(ParseError::new(
                     "\"speed\" is not allowed when pos=\"closed\"",
+                    speed_key,
+                ));
+            } else if self.transform.translation.is_none() {
+                return Err(ParseError::new(
+                    "\"speed\" is only allowed when \"pos\" is given",
                     speed_key,
                 ));
             }
             // TODO: disallow negative values?
             self.speed = Some(parse_attribute(speed_value)?);
         }
-        // TODO: code re-use?
+        if self.closed_pos && self.transform.rotation.is_none() {
+            self.closed_rot = true;
+        }
+        if self.closed_rot && self.transform.translation.is_none() {
+            self.closed_pos = true;
+        }
         if let Some((tension_key, tension_value)) = attributes.get_item("tension") {
-            if self.closed {
+            if self.closed_pos && self.closed_rot {
                 return Err(ParseError::new(
-                    "\"tension\" is not allowed when pos=\"closed\"",
+                    "\"tension\" is not allowed when pos=\"closed\" and rot=\"closed\"",
+                    tension_key,
+                ));
+            } else if self.transform.translation.is_none() && self.transform.rotation.is_none() {
+                return Err(ParseError::new(
+                    "\"tension\" is only allowed when \"pos\" and/or \"rot\" are given",
                     tension_key,
                 ));
             }
             self.tension = Some(parse_attribute(tension_value)?);
         }
         if let Some((continuity_key, continuity_value)) = attributes.get_item("continuity") {
-            if self.closed {
+            if self.closed_pos && self.closed_rot {
                 return Err(ParseError::new(
-                    "\"continuity\" is not allowed when pos=\"closed\"",
+                    "\"continuity\" is not allowed when pos=\"closed\" and rot=\"closed\"",
+                    continuity_key,
+                ));
+            } else if self.transform.translation.is_none() && self.transform.rotation.is_none() {
+                return Err(ParseError::new(
+                    "\"continuity\" is only allowed when \"pos\" and/or \"rot\" are given",
                     continuity_key,
                 ));
             }
             self.continuity = Some(parse_attribute(continuity_value)?);
         }
         if let Some((bias_key, bias_value)) = attributes.get_item("bias") {
-            if self.closed {
+            if self.closed_pos && self.closed_rot {
                 return Err(ParseError::new(
-                    "\"bias\" is not allowed when pos=\"closed\"",
+                    "\"bias\" is not allowed when pos=\"closed\" and rot=\"closed\"",
+                    bias_key,
+                ));
+            } else if self.transform.translation.is_none() && self.transform.rotation.is_none() {
+                return Err(ParseError::new(
+                    "\"bias\" is only allowed when \"pos\" and/or \"rot\" are given",
                     bias_key,
                 ));
             }
             self.bias = Some(parse_attribute(bias_value)?);
-        }
-
-        if !self.closed && self.transform.translation.is_none() {
-            return Err(ParseError::new("\"pos\" must be given (for now)", span));
         }
         Ok(())
     }
@@ -1144,9 +1243,9 @@ impl<'a> Element<'a> for TransformNodeElement {
             .downcast_mut::<TransformElement>()
             .unwrap();
         if let Some(previous) = parent.nodes.last() {
-            if previous.closed {
+            if previous.closed_pos || previous.closed_rot {
                 return Err(ParseError::new(
-                    "No further <o> element allowed after pos=\"closed\"",
+                    "No further <o> element allowed after pos=\"closed\" or rot=\"closed\"",
                     span,
                 ));
             }

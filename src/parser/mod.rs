@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use asdfspline::{AsdfPosSpline, NormWrapper, Spline};
+use asdfspline::{AsdfPosSpline, AsdfRotSpline, NormWrapper, Spline};
 use regex::Regex;
 use superslice::Ext; // for slice::lower_bound_by_key()
 use xmlparser as xml;
@@ -108,7 +108,8 @@ impl NormWrapper<Norm3> for Vec3 {
 
 struct SplineTransformer {
     id: Option<String>,
-    spline: AsdfPosSpline<Vec3, Norm3>,
+    pos_spline: Option<AsdfPosSpline<Vec3, Norm3>>,
+    rot_spline: Option<AsdfRotSpline>,
     samplerate: u32,
 }
 
@@ -120,9 +121,8 @@ impl Transformer for SplineTransformer {
     fn get_transform(&self, frame: u64) -> Transform {
         let time = frames2seconds(frame, self.samplerate).0;
         Transform {
-            translation: Some(self.spline.evaluate(time)),
-            // TODO: proper rotation
-            rotation: None,
+            translation: self.pos_spline.as_ref().map(|s| s.evaluate(time)),
+            rotation: self.rot_spline.as_ref().map(|s| s.evaluate(time)),
         }
     }
 }
