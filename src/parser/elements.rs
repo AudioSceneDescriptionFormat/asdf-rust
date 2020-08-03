@@ -906,19 +906,17 @@ impl<'a> Element<'a> for TransformElement {
         }
         assert!(!self.nodes.is_empty());
 
-        if self.nodes[0].time.unwrap_or_default() != Seconds(0.0) {
-            // TODO: This is a temporary restriction until "begin" semantics are sorted out:
-            return Err(ParseError::new(
-                "The first <transform> node is not allowed to have a time != 0 (for now)",
-                span,
-            ));
-        }
-
         let transformer = if self.nodes.len() == 1 {
             let node = self.nodes.pop().unwrap();
+            if node.time.is_some() {
+                return Err(ParseError::new(
+                    "time attribute is not allowed with a single transform node",
+                    span,
+                ));
+            }
             if node.closed {
                 return Err(ParseError::new(
-                    "pos=\"closed\" is not allowed with a single node",
+                    "pos=\"closed\" is not allowed with a single transform node",
                     span,
                 ));
             }
@@ -976,6 +974,17 @@ impl<'a> Element<'a> for TransformElement {
                 } else {
                     return Err(ParseError::new("Unable to infer time of last node", span));
                 };
+            }
+            if let &Some(first_time) = times.first().unwrap() {
+                if first_time != 0.0 {
+                    // TODO: This is a temporary restriction until "begin" semantics are sorted out:
+                    return Err(ParseError::new(
+                        "The first <transform> node is not allowed to have a time != 0 (for now)",
+                        span,
+                    ));
+                }
+            } else {
+                times[0] = Some(0.0);
             }
             if !closed {
                 if tensions.remove(0).is_some()
@@ -1056,7 +1065,10 @@ impl<'a> Element<'a> for TransformNodeElement {
         if let Some(time_value) = attributes.get_value("time") {
             let time = parse_attribute(time_value)?;
             if time < Seconds(0.0) {
-                return Err(ParseError::new("negative time values are not allowed", time_value));
+                return Err(ParseError::new(
+                    "negative time values are not allowed",
+                    time_value,
+                ));
             }
             self.time = Some(time);
         }
