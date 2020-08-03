@@ -1,7 +1,7 @@
 use std::ops::{Add, AddAssign};
 use std::str::FromStr;
 
-#[derive(Clone, Copy, Default, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq, PartialOrd)]
 pub struct Seconds(pub f32);
 
 #[derive(thiserror::Error, Debug)]

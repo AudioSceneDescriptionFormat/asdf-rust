@@ -1054,7 +1054,11 @@ impl<'a> Element<'a> for TransformNodeElement {
         _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(time_value) = attributes.get_value("time") {
-            self.time = Some(parse_attribute(time_value)?);
+            let time = parse_attribute(time_value)?;
+            if time < Seconds(0.0) {
+                return Err(ParseError::new("negative time values are not allowed", time_value));
+            }
+            self.time = Some(time);
         }
         let mut position = None;
         if let Some(pos_value) = attributes.get_value("pos") {
