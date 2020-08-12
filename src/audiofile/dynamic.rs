@@ -3,9 +3,7 @@ use std::io;
 use std::num::NonZeroU64;
 use std::path::Path;
 
-use super::converter;
-use super::vorbis;
-use super::wav;
+use super::{converter, flac, vorbis, wav};
 use super::{AudioFileBasics, AudioFileBlocks, BoxedError, RepeatedAudioFile};
 
 /// Can be used with dynamic dispatch
@@ -40,10 +38,16 @@ where
 pub enum LoadError {
     #[error("I/O error")]
     Open(#[from] io::Error),
-    #[error("error decoding file:\ntrying Vorbis: {vorbis_error}\ntrying WAV: {wav_error}")]
+    #[error(
+        "error decoding file:\n\
+        trying Vorbis: {vorbis_error}\n\
+        trying WAV: {wav_error}\n\
+        trying FLAC: {flac_error}"
+    )]
     Decode {
         vorbis_error: vorbis::OpenError,
         wav_error: hound::Error,
+        flac_error: flac::OpenError,
     },
     #[error("libsamplerate error")]
     Resample(#[from] converter::LibSamplerateError),
@@ -88,11 +92,20 @@ where
         Err(e) => e,
     };
 
-    // TODO: try more file types (FLAC, mp3, ...)
+    let file = fs::File::open(path)?;
+    let flac_error = match flac::File::new(file) {
+        Ok(file) => {
+            return Ok(repeat_and_convert(file, iterations, samplerate)?);
+        }
+        Err(e) => e,
+    };
+
+    // TODO: try more file types (mp3, ...)
 
     Err(LoadError::Decode {
         vorbis_error,
         wav_error,
+        flac_error,
     })
 }
 

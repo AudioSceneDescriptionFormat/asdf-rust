@@ -14,6 +14,7 @@ crate-type = ["lib", "staticlib"]
 asdfspline = { path = "asdfspline" }
 crossbeam = { git = "https://github.com/stjepang/crossbeam.git", rev = "d1736eff0834302e30bda0d259c920b6d7ed0a58" }
 errno = "*"
+libflac-sys = "0.1"
 hound = "*"
 lazy_static = "1.3.0"
 libc = "*"
