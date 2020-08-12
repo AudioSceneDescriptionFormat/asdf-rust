@@ -99,7 +99,7 @@ extern "C" fn close_func(_datasource: *mut c_void) -> c_int {
     0
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub struct LibVorbisError(pub i32);
 
 impl fmt::Display for LibVorbisError {
@@ -128,11 +128,9 @@ impl fmt::Display for LibVorbisError {
     }
 }
 
-impl Error for LibVorbisError {}
-
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum OpenError {
-    Vorbis(LibVorbisError),
+    Vorbis(#[from] LibVorbisError),
     ChangingRate,
     ChangingChannels,
 }
@@ -184,7 +182,7 @@ where
             )
         };
         if result != 0 {
-            return Err(OpenError::Vorbis(LibVorbisError(result)));
+            return Err(LibVorbisError(result).into());
         }
         let mut ov_struct = unsafe { ov_struct.assume_init() };
         assert!(ov_struct.links > 0);
@@ -202,7 +200,7 @@ where
         }
         let frames = unsafe { vorbisfile_sys::ov_pcm_total(&mut ov_struct, -1) };
         if frames < 0 {
-            Err(OpenError::Vorbis(LibVorbisError(frames as i32)))
+            Err(LibVorbisError(frames as i32).into())
         } else {
             Ok(File {
                 ov_struct,

@@ -93,7 +93,7 @@ where
 
 // TODO: separate error type for SRC initialization?
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub struct LibSamplerateError(pub i32);
 
 // http://www.mega-nerd.com/SRC/api_misc.html#ErrorReporting
@@ -107,8 +107,6 @@ impl fmt::Display for LibSamplerateError {
         }
     }
 }
-
-impl Error for LibSamplerateError {}
 
 impl<F> Drop for Converter<F>
 where
