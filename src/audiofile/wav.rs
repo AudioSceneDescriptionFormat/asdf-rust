@@ -1,5 +1,6 @@
-use std::error::Error;
 use std::io::{Read, Seek};
+
+use super::BoxedError;
 
 pub struct File<R>
 where
@@ -70,7 +71,7 @@ where
         self.reader.spec().sample_rate
     }
 
-    fn seek(&mut self, frame: u64) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn seek(&mut self, frame: u64) -> Result<(), BoxedError> {
         Ok(self.reader.seek(frame as u32)?)
     }
 }
@@ -152,7 +153,7 @@ where
 {
     type Block = Block;
 
-    fn next_block(&mut self, max_frames: u32) -> Result<&mut Block, Box<dyn Error + Send + Sync>> {
+    fn next_block(&mut self, max_frames: u32) -> Result<&mut Block, BoxedError> {
         // Dynamic dispatch based on sample format (FloatFormat, Pcm16Format, etc.):
         self.block_reader
             .fill_block(&mut self.reader, &mut self.current_block, max_frames)?;

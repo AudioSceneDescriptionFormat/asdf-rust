@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fs;
 use std::io;
 use std::num::NonZeroU64;
@@ -7,7 +6,7 @@ use std::path::Path;
 use super::converter;
 use super::vorbis;
 use super::wav;
-use super::{AudioFileBasics, AudioFileBlocks, RepeatedAudioFile};
+use super::{AudioFileBasics, AudioFileBlocks, BoxedError, RepeatedAudioFile};
 
 /// Can be used with dynamic dispatch
 pub trait AudioFile: AudioFileBasics {
@@ -17,7 +16,7 @@ pub trait AudioFile: AudioFileBasics {
         blocksize: u32,
         offset: u32,
         channels: &mut [Box<[f32]>],
-    ) -> Result<(), Box<dyn Error + Send + Sync>>;
+    ) -> Result<(), BoxedError>;
 }
 
 impl<B, F> AudioFile for F
@@ -32,7 +31,7 @@ where
         blocksize: u32,
         offset: u32,
         channels: &mut [Box<[f32]>],
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), BoxedError> {
         self.fill_channels(channel_map, blocksize, offset, channels)
     }
 }

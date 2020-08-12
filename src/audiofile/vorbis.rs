@@ -1,10 +1,11 @@
-use std::error::Error;
 use std::fmt;
 use std::io::{self, Read, Seek};
 use std::mem::MaybeUninit;
 
 use libc::{c_int, c_long, c_void};
 use ogg_sys::ogg_int64_t;
+
+use super::BoxedError;
 
 const EIO: errno::Errno = errno::Errno(5);
 
@@ -228,7 +229,7 @@ impl<R> super::AudioFileBasics for File<R>
 where
     R: Read + Seek,
 {
-    fn seek(&mut self, frame: u64) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn seek(&mut self, frame: u64) -> Result<(), BoxedError> {
         // https://xiph.org/vorbis/doc/vorbisfile/ov_pcm_seek.html
         let result =
             unsafe { vorbisfile_sys::ov_pcm_seek(&mut self.ov_struct, frame as ogg_int64_t) };
@@ -258,7 +259,7 @@ where
 {
     type Block = Block;
 
-    fn next_block(&mut self, max_frames: u32) -> Result<&mut Block, Box<dyn Error + Send + Sync>> {
+    fn next_block(&mut self, max_frames: u32) -> Result<&mut Block, BoxedError> {
         let mut current_section: c_int = 0;
         let result: c_long = unsafe {
             // https://xiph.org/vorbis/doc/vorbisfile/ov_read_float.html

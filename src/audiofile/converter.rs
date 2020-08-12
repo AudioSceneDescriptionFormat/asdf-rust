@@ -1,10 +1,9 @@
-use std::error::Error;
 use std::ffi::CStr;
 use std::fmt;
 
 use libc::{c_int, c_long};
 
-use super::{AudioFileBasics, AudioFileBlocks};
+use super::{AudioFileBasics, AudioFileBlocks, BoxedError};
 
 // http://www.mega-nerd.com/SRC/api_misc.html#Converters
 pub use libsamplerate_sys::SRC_LINEAR;
@@ -182,7 +181,7 @@ where
         (self.file.frames() as f64 * self.data.src_ratio) as u64
     }
 
-    fn seek(&mut self, frame: u64) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn seek(&mut self, frame: u64) -> Result<(), BoxedError> {
         // TODO: is this correct? what about rounding errors?
         self.file
             .seek((frame as f64 / self.data.src_ratio) as u64)?;
@@ -203,7 +202,7 @@ where
 {
     type Block = Block;
 
-    fn next_block(&mut self, max_frames: u32) -> Result<&mut Block, Box<dyn Error + Send + Sync>> {
+    fn next_block(&mut self, max_frames: u32) -> Result<&mut Block, BoxedError> {
         let channels = self.file.channels();
 
         // We might have to call src_process() multiple times to get some data out

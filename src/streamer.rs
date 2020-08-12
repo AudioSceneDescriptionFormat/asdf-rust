@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -8,6 +7,7 @@ use std::time::Duration;
 
 use crossbeam::queue;
 
+use crate::audiofile::BoxedError;
 use crate::parser::{FileStorage, PlaylistEntry};
 
 enum Fade {
@@ -148,7 +148,7 @@ pub struct FileStreamer {
     ready_consumer: queue::spsc::Consumer<(u64, DataConsumer)>,
     seek_producer: queue::spsc::Producer<(u64, DataConsumer)>,
     data_consumer: Option<DataConsumer>,
-    reader_thread: Option<thread::JoinHandle<Result<(), Box<dyn Error + Send + Sync>>>>,
+    reader_thread: Option<thread::JoinHandle<Result<(), BoxedError>>>,
     reader_thread_keep_reading: Arc<AtomicBool>,
     channels: u32,
     blocksize: u32,
