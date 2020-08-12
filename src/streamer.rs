@@ -190,7 +190,7 @@ impl FileStreamer {
             make_data_queue(buffer_blocks as usize, blocksize, channels);
         let reader_thread_keep_reading = Arc::new(AtomicBool::new(true));
         let keep_reading = Arc::clone(&reader_thread_keep_reading);
-        let reader_thread = thread::spawn(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+        let reader_thread = thread::spawn(move || {
             let mut data_consumer = Some(data_consumer);
             let mut current_frame = 0;
             let mut seek_frame = 0;
