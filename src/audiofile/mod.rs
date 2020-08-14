@@ -4,6 +4,7 @@ use std::ops::IndexMut;
 pub mod converter;
 pub mod dynamic;
 pub mod flac;
+pub mod mp3;
 pub mod vorbis;
 pub mod wav;
 

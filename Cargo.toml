@@ -19,6 +19,7 @@ hound = "*"
 lazy_static = "1.3.0"
 libc = "*"
 libsamplerate-sys = "*"
+minimp3_ex-sys = { version = "0.1", features = ["float-output"] }
 nalgebra = "0.21"
 ogg-sys = "*"
 regex = "1"
