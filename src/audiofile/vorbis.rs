@@ -54,7 +54,7 @@ where
     let ptr = ptr as *mut u8;
     assert!(!datasource.is_null());
     let reader = unsafe { &mut *(datasource as *mut R) };
-    let buffer = unsafe { std::slice::from_raw_parts_mut(ptr, (size * nmemb) as usize) };
+    let buffer = unsafe { std::slice::from_raw_parts_mut(ptr, size * nmemb) };
     loop {
         match reader.read(buffer) {
             Ok(bytes) => return bytes,
