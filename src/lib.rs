@@ -193,7 +193,7 @@ trait Transformer {
     fn get_transform(&self, frame: u64) -> Transform;
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Source {
     id: Option<String>,
     name: Option<String>,
