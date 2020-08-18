@@ -37,6 +37,8 @@ Using [cargo-readme](https://github.com/livioribeiro/cargo-readme)
 cargo readme -o README.md
 ```
 */
+#![warn(rust_2018_idioms)]
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;

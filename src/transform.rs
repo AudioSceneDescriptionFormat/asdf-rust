@@ -93,7 +93,7 @@ pub fn parse_transform<'a>(
     Ok(result)
 }
 
-pub fn parse_pos(value: xml::StrSpan) -> Result<Vec3, ParseError> {
+pub fn parse_pos(value: xml::StrSpan<'_>) -> Result<Vec3, ParseError> {
     let mut values = value.as_str().split_whitespace().map(|s| {
         f32::from_str(s)
             .map_err(|e| ParseError::new(format!("error parsing \"pos\" value(s): {}", e), value))
@@ -120,7 +120,7 @@ pub fn parse_pos(value: xml::StrSpan) -> Result<Vec3, ParseError> {
     Ok(Vec3::new(x, y, z))
 }
 
-pub fn parse_rot(value: xml::StrSpan) -> Result<Quat, ParseError> {
+pub fn parse_rot(value: xml::StrSpan<'_>) -> Result<Quat, ParseError> {
     let mut values = value.as_str().split_whitespace().map(|s| {
         f32::from_str(s)
             .map_err(|e| ParseError::new(format!("error parsing \"rot\" value(s): {}", e), value))

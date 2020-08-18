@@ -98,7 +98,7 @@ pub struct LibSamplerateError(pub i32);
 
 // http://www.mega-nerd.com/SRC/api_misc.html#ErrorReporting
 impl fmt::Display for LibSamplerateError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let msg = unsafe { libsamplerate_sys::src_strerror(self.0) };
         if msg.is_null() {
             write!(f, "Invalid error code: {}", self.0)

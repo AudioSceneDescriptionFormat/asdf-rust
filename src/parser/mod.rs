@@ -144,7 +144,7 @@ pub fn load_scene(
     sleeptime: Duration,
 ) -> Result<Scene, LoadError> {
     let file_data = fs::read_to_string(path)?;
-    let mut element_stack = Vec::<(Box<dyn Element>, xml::StrSpan)>::new();
+    let mut element_stack = Vec::<(Box<dyn Element<'_>>, xml::StrSpan<'_>)>::new();
     let mut scene = SceneInitializer {
         dir: path.parent().unwrap().into(),
         samplerate,
@@ -331,16 +331,16 @@ pub fn load_scene(
 pub type Attributes<'a> = Vec<(xml::StrSpan<'a>, xml::StrSpan<'a>)>;
 
 trait GetAttributeValue {
-    fn get_value(&mut self, name: &str) -> Option<xml::StrSpan>;
-    fn get_item(&mut self, name: &str) -> Option<(xml::StrSpan, xml::StrSpan)>;
+    fn get_value(&mut self, name: &str) -> Option<xml::StrSpan<'_>>;
+    fn get_item(&mut self, name: &str) -> Option<(xml::StrSpan<'_>, xml::StrSpan<'_>)>;
 }
 
 impl<'a> GetAttributeValue for Attributes<'a> {
-    fn get_value(&mut self, name: &str) -> Option<xml::StrSpan> {
+    fn get_value(&mut self, name: &str) -> Option<xml::StrSpan<'_>> {
         self.get_item(name).map(|(_, v)| v)
     }
 
-    fn get_item(&mut self, name: &str) -> Option<(xml::StrSpan, xml::StrSpan)> {
+    fn get_item(&mut self, name: &str) -> Option<(xml::StrSpan<'_>, xml::StrSpan<'_>)> {
         if let Some(idx) = self.iter().position(|&(k, _)| k.as_str() == name) {
             Some(self.remove(idx))
         } else {
@@ -349,7 +349,7 @@ impl<'a> GetAttributeValue for Attributes<'a> {
     }
 }
 
-fn no_namespaces(prefix: xml::StrSpan) -> Result<(), ParseError> {
+fn no_namespaces(prefix: xml::StrSpan<'_>) -> Result<(), ParseError> {
     if prefix.is_empty() {
         Ok(())
     } else {
@@ -371,7 +371,7 @@ impl<'a> SceneInitializer<'a> {
     ///
     /// Returning an empty string means the attribute didn't exist.
     /// NB: Empty strings are not valid XML IDs!
-    fn parse_id(&mut self, value: xml::StrSpan) -> Result<String, ParseError> {
+    fn parse_id(&mut self, value: xml::StrSpan<'_>) -> Result<String, ParseError> {
         lazy_static! {
             // TODO: Allow flanking whitespace?
             static ref RE: Regex = Regex::new(r"(?x)
@@ -413,7 +413,7 @@ impl<'a> SceneInitializer<'a> {
         format!(".asdf:{}", self.current_id_suffix)
     }
 
-    fn get_id(&mut self, attributes: &mut Attributes) -> Result<Option<String>, ParseError> {
+    fn get_id(&mut self, attributes: &mut Attributes<'_>) -> Result<Option<String>, ParseError> {
         Ok(if let Some(value) = attributes.get_value("id") {
             Some(self.parse_id(value)?)
         } else {
@@ -421,7 +421,10 @@ impl<'a> SceneInitializer<'a> {
         })
     }
 
-    fn get_source_id(&mut self, attributes: &mut Attributes) -> Result<Option<String>, ParseError> {
+    fn get_source_id(
+        &mut self,
+        attributes: &mut Attributes<'_>,
+    ) -> Result<Option<String>, ParseError> {
         if let Some(value) = attributes.get_value("source") {
             let id = value.to_string();
             if self

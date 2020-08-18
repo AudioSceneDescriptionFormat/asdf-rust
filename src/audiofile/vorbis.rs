@@ -103,7 +103,7 @@ extern "C" fn close_func(_datasource: *mut c_void) -> c_int {
 pub struct LibVorbisError(pub i32);
 
 impl fmt::Display for LibVorbisError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use vorbis_sys::*;
         write!(
             f,
@@ -136,7 +136,7 @@ pub enum OpenError {
 }
 
 impl fmt::Display for OpenError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Error opening Vorbis file: ")?;
         use OpenError::*;
         match self {

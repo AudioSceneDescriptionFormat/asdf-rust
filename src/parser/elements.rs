@@ -36,15 +36,15 @@ impl<T: Any> AsAny for T {
 pub trait Element<'a>: AsAny {
     fn parse_attributes(
         &mut self,
-        attributes: &mut Attributes,
-        end_span: xml::StrSpan,
-        scene: &mut SceneInitializer,
+        attributes: &mut Attributes<'_>,
+        end_span: xml::StrSpan<'_>,
+        scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError>;
 
     fn open_child_element(
         &mut self,
-        name: xml::StrSpan,
-        parent_span: xml::StrSpan,
+        name: xml::StrSpan<'_>,
+        parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         Err(ParseError::new(
             format!("No child elements allowed in <{}>", parent_span.as_str()),
@@ -57,7 +57,7 @@ pub trait Element<'a>: AsAny {
         _files: Vec<PlaylistEntry>,
         _transformers: Vec<TransformerInstance>,
         _duration: u64,
-        _span: xml::StrSpan,
+        _span: xml::StrSpan<'_>,
     ) -> Result<(), ParseError> {
         unreachable!("This has to be implemented for all container elements");
     }
@@ -70,7 +70,7 @@ pub trait Element<'a>: AsAny {
     fn close(
         self: Box<Self>,
         span: xml::StrSpan<'a>,
-        parent: Option<&mut Box<dyn Element>>,
+        parent: Option<&mut Box<dyn Element<'_>>>,
         scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError>;
 }
@@ -82,7 +82,7 @@ pub struct AsdfElement {
 }
 
 impl AsdfElement {
-    pub fn new(name: xml::StrSpan) -> Result<AsdfElement, ParseError> {
+    pub fn new(name: xml::StrSpan<'_>) -> Result<AsdfElement, ParseError> {
         if name.as_str() == "asdf" {
             Ok(AsdfElement {
                 version: String::new(),
@@ -101,9 +101,9 @@ impl AsdfElement {
 impl<'a> Element<'a> for AsdfElement {
     fn parse_attributes(
         &mut self,
-        attributes: &mut Attributes,
-        span: xml::StrSpan,
-        _scene: &mut SceneInitializer,
+        attributes: &mut Attributes<'_>,
+        span: xml::StrSpan<'_>,
+        _scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         if let Some(value) = attributes.get_value("version") {
             if value.as_str().trim() == "0.4" {
@@ -125,20 +125,20 @@ impl<'a> Element<'a> for AsdfElement {
 
     fn open_child_element(
         &mut self,
-        name: xml::StrSpan,
-        parent_span: xml::StrSpan,
+        name: xml::StrSpan<'_>,
+        parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         let result = match name.as_str() {
             "head" => {
                 if self.previous_child.is_empty() {
-                    Ok(Box::new(HeadElement::new()) as Box<dyn Element>)
+                    Ok(Box::new(HeadElement::new()) as Box<dyn Element<'_>>)
                 } else {
                     Err(ParseError::new("No element is allowed before <head>", name))
                 }
             }
             "body" => {
                 if self.previous_child.is_empty() || self.previous_child == "head" {
-                    Ok(Box::new(BodyElement::new()) as Box<dyn Element>)
+                    Ok(Box::new(BodyElement::new()) as Box<dyn Element<'_>>)
                 } else {
                     Err(ParseError::new(
                         "Only a <head> element is allowed before <body>",
@@ -167,7 +167,7 @@ impl<'a> Element<'a> for AsdfElement {
         files: Vec<PlaylistEntry>,
         transformers: Vec<TransformerInstance>,
         duration: u64,
-        span: xml::StrSpan,
+        span: xml::StrSpan<'_>,
     ) -> Result<(), ParseError> {
         self.seq
             .add_files_and_transformers(files, transformers, duration, span)
@@ -176,7 +176,7 @@ impl<'a> Element<'a> for AsdfElement {
     fn close(
         self: Box<Self>,
         _span: xml::StrSpan<'a>,
-        parent: Option<&mut Box<dyn Element>>,
+        parent: Option<&mut Box<dyn Element<'_>>>,
         scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         assert!(parent.is_none());
@@ -206,9 +206,9 @@ impl HeadElement {
 impl<'a> Element<'a> for HeadElement {
     fn parse_attributes(
         &mut self,
-        _attributes: &mut Attributes,
-        _span: xml::StrSpan,
-        _scene: &mut SceneInitializer,
+        _attributes: &mut Attributes<'_>,
+        _span: xml::StrSpan<'_>,
+        _scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         // No attributes are allowed
         Ok(())
@@ -216,8 +216,8 @@ impl<'a> Element<'a> for HeadElement {
 
     fn open_child_element(
         &mut self,
-        name: xml::StrSpan,
-        _parent_span: xml::StrSpan,
+        name: xml::StrSpan<'_>,
+        _parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         match name.as_str() {
             "meta" => Err(ParseError::new("TODO: implement <meta> tags", name)),
@@ -240,7 +240,7 @@ impl<'a> Element<'a> for HeadElement {
     fn close(
         self: Box<Self>,
         _span: xml::StrSpan<'a>,
-        _parent: Option<&mut Box<dyn Element>>,
+        _parent: Option<&mut Box<dyn Element<'_>>>,
         _scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         Ok(())
@@ -258,9 +258,9 @@ impl SourceElement {
 impl<'a> Element<'a> for SourceElement {
     fn parse_attributes(
         &mut self,
-        attributes: &mut Attributes,
-        _span: xml::StrSpan,
-        scene: &mut SceneInitializer,
+        attributes: &mut Attributes<'_>,
+        _span: xml::StrSpan<'_>,
+        scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         let id = scene.get_id(attributes)?;
 
@@ -283,7 +283,7 @@ impl<'a> Element<'a> for SourceElement {
     fn close(
         self: Box<Self>,
         _span: xml::StrSpan<'a>,
-        _parent: Option<&mut Box<dyn Element>>,
+        _parent: Option<&mut Box<dyn Element<'_>>>,
         _scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         // TODO: disallow <source/> with no attributes?
@@ -302,9 +302,9 @@ impl ReferenceElement {
 impl<'a> Element<'a> for ReferenceElement {
     fn parse_attributes(
         &mut self,
-        attributes: &mut Attributes,
-        _span: xml::StrSpan,
-        scene: &mut SceneInitializer,
+        attributes: &mut Attributes<'_>,
+        _span: xml::StrSpan<'_>,
+        scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         if let Some(id) = attributes.get_value("id") {
             if id.as_str() != REFERENCE_ID {
@@ -321,7 +321,7 @@ impl<'a> Element<'a> for ReferenceElement {
     fn close(
         self: Box<Self>,
         _span: xml::StrSpan<'a>,
-        _parent: Option<&mut Box<dyn Element>>,
+        _parent: Option<&mut Box<dyn Element<'_>>>,
         _scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         // TODO: disallow <reference/> with no attributes?
@@ -344,9 +344,9 @@ impl BodyElement {
 impl<'a> Element<'a> for BodyElement {
     fn parse_attributes(
         &mut self,
-        _attributes: &mut Attributes,
-        _span: xml::StrSpan,
-        _scene: &mut SceneInitializer,
+        _attributes: &mut Attributes<'_>,
+        _span: xml::StrSpan<'_>,
+        _scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         // No attributes are allowed
         Ok(())
@@ -354,8 +354,8 @@ impl<'a> Element<'a> for BodyElement {
 
     fn open_child_element(
         &mut self,
-        name: xml::StrSpan,
-        parent_span: xml::StrSpan,
+        name: xml::StrSpan<'_>,
+        parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         self.seq.open_child_element(name, parent_span)
     }
@@ -365,7 +365,7 @@ impl<'a> Element<'a> for BodyElement {
         files: Vec<PlaylistEntry>,
         transformers: Vec<TransformerInstance>,
         duration: u64,
-        span: xml::StrSpan,
+        span: xml::StrSpan<'_>,
     ) -> Result<(), ParseError> {
         self.seq
             .add_files_and_transformers(files, transformers, duration, span)
@@ -374,7 +374,7 @@ impl<'a> Element<'a> for BodyElement {
     fn close(
         self: Box<Self>,
         span: xml::StrSpan<'a>,
-        parent: Option<&mut Box<dyn Element>>,
+        parent: Option<&mut Box<dyn Element<'_>>>,
         scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         Box::new(self.seq).close(span, parent, scene)
@@ -402,9 +402,9 @@ impl SeqElement {
 impl<'a> Element<'a> for SeqElement {
     fn parse_attributes(
         &mut self,
-        attributes: &mut Attributes,
-        _span: xml::StrSpan,
-        _scene: &mut SceneInitializer,
+        attributes: &mut Attributes<'_>,
+        _span: xml::StrSpan<'_>,
+        _scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         if let Some(repeat_value) = attributes.get_value("repeat") {
             self.iterations = parse_attribute(repeat_value)?;
@@ -414,8 +414,8 @@ impl<'a> Element<'a> for SeqElement {
 
     fn open_child_element(
         &mut self,
-        name: xml::StrSpan,
-        parent_span: xml::StrSpan,
+        name: xml::StrSpan<'_>,
+        parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         child_in_container(name, parent_span)
     }
@@ -425,7 +425,7 @@ impl<'a> Element<'a> for SeqElement {
         files: Vec<PlaylistEntry>,
         transformers: Vec<TransformerInstance>,
         duration: u64,
-        _span: xml::StrSpan,
+        _span: xml::StrSpan<'_>,
     ) -> Result<(), ParseError> {
         let end = self.end;
         self.files
@@ -448,7 +448,7 @@ impl<'a> Element<'a> for SeqElement {
     fn close(
         self: Box<Self>,
         span: xml::StrSpan<'a>,
-        parent: Option<&mut Box<dyn Element>>,
+        parent: Option<&mut Box<dyn Element<'_>>>,
         _scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         let mut files = Vec::new();
@@ -492,9 +492,9 @@ impl ParElement {
 impl<'a> Element<'a> for ParElement {
     fn parse_attributes(
         &mut self,
-        attributes: &mut Attributes,
-        _span: xml::StrSpan,
-        _scene: &mut SceneInitializer,
+        attributes: &mut Attributes<'_>,
+        _span: xml::StrSpan<'_>,
+        _scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         if let Some(repeat_value) = attributes.get_value("repeat") {
             self.iterations = parse_attribute(repeat_value)?;
@@ -504,8 +504,8 @@ impl<'a> Element<'a> for ParElement {
 
     fn open_child_element(
         &mut self,
-        name: xml::StrSpan,
-        parent_span: xml::StrSpan,
+        name: xml::StrSpan<'_>,
+        parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         child_in_container(name, parent_span)
     }
@@ -515,7 +515,7 @@ impl<'a> Element<'a> for ParElement {
         files: Vec<PlaylistEntry>,
         transformers: Vec<TransformerInstance>,
         duration: u64,
-        span: xml::StrSpan,
+        span: xml::StrSpan<'_>,
     ) -> Result<(), ParseError> {
         if let Some(self_duration) = self.duration_frames {
             if duration > self_duration {
@@ -537,7 +537,7 @@ impl<'a> Element<'a> for ParElement {
     fn close(
         self: Box<Self>,
         span: xml::StrSpan<'a>,
-        parent: Option<&mut Box<dyn Element>>,
+        parent: Option<&mut Box<dyn Element<'_>>>,
         _scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         let duration = self.duration_frames.unwrap_or_default();
@@ -585,9 +585,9 @@ impl ClipElement {
 impl<'a> Element<'a> for ClipElement {
     fn parse_attributes(
         &mut self,
-        attributes: &mut Attributes,
-        span: xml::StrSpan,
-        scene: &mut SceneInitializer,
+        attributes: &mut Attributes<'_>,
+        span: xml::StrSpan<'_>,
+        scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         self.clip_id = scene.get_id(attributes)?;
         self.source_id = scene.get_source_id(attributes)?;
@@ -630,8 +630,8 @@ impl<'a> Element<'a> for ClipElement {
 
     fn open_child_element(
         &mut self,
-        name: xml::StrSpan,
-        _parent_span: xml::StrSpan,
+        name: xml::StrSpan<'_>,
+        _parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         if name.as_str() == "channel" {
             if self.source_id.is_none() {
@@ -665,7 +665,7 @@ impl<'a> Element<'a> for ClipElement {
     fn close(
         mut self: Box<Self>,
         span: xml::StrSpan<'a>,
-        parent: Option<&mut Box<dyn Element>>,
+        parent: Option<&mut Box<dyn Element<'_>>>,
         scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         let file = self.file.take().unwrap();
@@ -771,9 +771,9 @@ struct ChannelElement {
 impl<'a> Element<'a> for ChannelElement {
     fn parse_attributes(
         &mut self,
-        attributes: &mut Attributes,
-        _span: xml::StrSpan,
-        scene: &mut SceneInitializer,
+        attributes: &mut Attributes<'_>,
+        _span: xml::StrSpan<'_>,
+        scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         if let Some(skip) = attributes.get_value("skip") {
             self.skip = Some(parse_attribute(skip)?);
@@ -795,7 +795,7 @@ impl<'a> Element<'a> for ChannelElement {
     fn close(
         self: Box<Self>,
         _span: xml::StrSpan<'a>,
-        parent: Option<&mut Box<dyn Element>>,
+        parent: Option<&mut Box<dyn Element<'_>>>,
         _scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         let parent = parent.unwrap();
@@ -826,9 +826,9 @@ impl TransformElement {
 impl<'a> Element<'a> for TransformElement {
     fn parse_attributes(
         &mut self,
-        attributes: &mut Attributes,
-        span: xml::StrSpan,
-        scene: &mut SceneInitializer,
+        attributes: &mut Attributes<'_>,
+        span: xml::StrSpan<'_>,
+        scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         self.id = scene.get_id(attributes)?;
         if let Some(apply_to) = attributes.get_value("apply-to") {
@@ -860,8 +860,8 @@ impl<'a> Element<'a> for TransformElement {
 
     fn open_child_element(
         &mut self,
-        name: xml::StrSpan,
-        _parent_span: xml::StrSpan,
+        name: xml::StrSpan<'_>,
+        _parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         if name.as_str() == "o" {
             Ok(Box::new(TransformNodeElement::default()))
@@ -879,7 +879,7 @@ impl<'a> Element<'a> for TransformElement {
     fn close(
         mut self: Box<Self>,
         span: xml::StrSpan<'a>,
-        parent: Option<&mut Box<dyn Element>>,
+        parent: Option<&mut Box<dyn Element<'_>>>,
         scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         assert!(!self.targets.is_empty());
@@ -1122,9 +1122,9 @@ struct TransformNodeElement {
 impl<'a> Element<'a> for TransformNodeElement {
     fn parse_attributes(
         &mut self,
-        attributes: &mut Attributes,
-        span: xml::StrSpan,
-        _scene: &mut SceneInitializer,
+        attributes: &mut Attributes<'_>,
+        span: xml::StrSpan<'_>,
+        _scene: &mut SceneInitializer<'_>,
     ) -> Result<(), ParseError> {
         if attributes.is_empty() {
             return Err(ParseError::new("empty <o> elements are not allowed", span));
@@ -1234,7 +1234,7 @@ impl<'a> Element<'a> for TransformNodeElement {
     fn close(
         self: Box<Self>,
         span: xml::StrSpan<'a>,
-        parent: Option<&mut Box<dyn Element>>,
+        parent: Option<&mut Box<dyn Element<'_>>>,
         _scene: &mut SceneInitializer<'a>,
     ) -> Result<(), ParseError> {
         let parent = parent.unwrap();
@@ -1256,8 +1256,8 @@ impl<'a> Element<'a> for TransformNodeElement {
 }
 
 fn child_in_container<'a>(
-    name: xml::StrSpan,
-    parent_span: xml::StrSpan,
+    name: xml::StrSpan<'_>,
+    parent_span: xml::StrSpan<'_>,
 ) -> Result<Box<dyn Element<'a>>, ParseError> {
     match name.as_str() {
         "seq" => Ok(Box::new(SeqElement::new())),
@@ -1276,7 +1276,7 @@ fn child_in_container<'a>(
 }
 
 /// Convenience function for automatic deduction of return type.
-fn parse_attribute<T>(span: xml::StrSpan) -> Result<T, ParseError>
+fn parse_attribute<T>(span: xml::StrSpan<'_>) -> Result<T, ParseError>
 where
     T: ParseAttribute,
 {
@@ -1284,13 +1284,13 @@ where
 }
 
 trait ParseAttribute {
-    fn parse_attribute(span: xml::StrSpan) -> Result<Self, ParseError>
+    fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError>
     where
         Self: Sized;
 }
 
 impl ParseAttribute for NonZeroU64 {
-    fn parse_attribute(span: xml::StrSpan) -> Result<Self, ParseError> {
+    fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         NonZeroU64::from_str(span.as_str()).map_err(|e| {
             ParseError::new(
                 format!("error parsing attribute as positive integer: {}", e),
@@ -1301,7 +1301,7 @@ impl ParseAttribute for NonZeroU64 {
 }
 
 impl ParseAttribute for u32 {
-    fn parse_attribute(span: xml::StrSpan) -> Result<Self, ParseError> {
+    fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         u32::from_str(span.as_str()).map_err(|e| {
             ParseError::new(
                 format!("error parsing attribute as non-negative integer: {}", e),
@@ -1312,7 +1312,7 @@ impl ParseAttribute for u32 {
 }
 
 impl ParseAttribute for f32 {
-    fn parse_attribute(span: xml::StrSpan) -> Result<Self, ParseError> {
+    fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         f32::from_str(span.as_str()).map_err(|e| {
             ParseError::new(
                 format!("error parsing attribute as decimal value(s): {}", e),
@@ -1323,7 +1323,7 @@ impl ParseAttribute for f32 {
 }
 
 impl ParseAttribute for Seconds {
-    fn parse_attribute(span: xml::StrSpan) -> Result<Self, ParseError> {
+    fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         Seconds::from_str(span.as_str())
             .map_err(|e| ParseError::new(format!("invalid time value: {}", e), span))
     }

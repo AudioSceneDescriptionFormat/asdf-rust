@@ -83,7 +83,7 @@ impl<'b> WriteBlock<'b> {
 }
 
 impl DataProducer {
-    fn write_block(&mut self) -> Option<WriteBlock> {
+    fn write_block(&mut self) -> Option<WriteBlock<'_>> {
         let mut block = match self.recycling_consumer.pop() {
             Ok(block) => block,
             _ => return None,

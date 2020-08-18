@@ -11,7 +11,7 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    pub fn new<S: AsRef<str>>(msg: S, span: xml::StrSpan) -> ParseError {
+    pub fn new<S: AsRef<str>>(msg: S, span: xml::StrSpan<'_>) -> ParseError {
         // TODO: make configurable?
         const LINES_ABOVE: usize = 9;
         const MARKER: char = '^';
