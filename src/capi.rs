@@ -3,7 +3,7 @@
 
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 use std::time::Duration;
 
 use libc::c_char;
@@ -87,7 +87,7 @@ pub unsafe extern "C" fn asdf_scene_new(
     let filename = match CStr::from_ptr(filename).to_str() {
         Ok(s) => s,
         Err(e) => {
-            set_error(format!("Invalid filename: {}", e));
+            set_error_string(format!("Invalid filename: {}", e));
             return std::ptr::null_mut();
         }
     };
@@ -100,7 +100,7 @@ pub unsafe extern "C" fn asdf_scene_new(
     ) {
         Ok(scene) => Box::into_raw(Box::new(scene)),
         Err(e) => {
-            set_error(e);
+            set_error(&e);
             std::ptr::null_mut()
         }
     }
@@ -178,7 +178,7 @@ pub unsafe extern "C" fn asdf_scene_get_audio_data(
     let success = scene.get_audio_data(data, rolling);
     if !success {
         // TODO: get more error details from streamer
-        set_error("Unrecoverable error getting audio file data");
+        set_error_string("Unrecoverable error getting audio file data");
     }
     success
 }
@@ -195,8 +195,19 @@ thread_local! {
     static LAST_ERROR: RefCell<CString> = RefCell::new(CString::new("no error").unwrap());
 }
 
-fn set_error<D: Display>(error: D) {
+fn set_error_string(error: impl Display) {
     LAST_ERROR.with(|cell| {
         *cell.borrow_mut() = CString::new(error.to_string()).unwrap();
     });
+}
+
+fn set_error(error: &dyn std::error::Error) {
+    let mut error = error;
+    let mut msg = String::new();
+    write!(&mut msg, "{}", error).unwrap();
+    while let Some(source) = error.source() {
+        error = source;
+        write!(&mut msg, "\nerror details: {}", error).unwrap();
+    }
+    set_error_string(msg);
 }

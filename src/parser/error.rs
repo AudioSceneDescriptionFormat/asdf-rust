@@ -4,14 +4,15 @@ use std::iter;
 use xmlparser as xml;
 
 #[derive(thiserror::Error, Debug)]
-#[error("{msg}\n---{context}")]
+#[error("{msg}\n---{context}\n---")]
 pub struct ParseError {
     msg: String,
     context: String,
+    source: Option<Box<dyn std::error::Error>>,
 }
 
 impl ParseError {
-    pub fn new<S: AsRef<str>>(msg: S, span: xml::StrSpan<'_>) -> ParseError {
+    pub fn new(msg: impl Into<String>, span: xml::StrSpan<'_>) -> ParseError {
         // TODO: make configurable?
         const LINES_ABOVE: usize = 9;
         const MARKER: char = '^';
@@ -76,9 +77,20 @@ impl ParseError {
             line_start = line_end;
         }
         ParseError {
-            msg: msg.as_ref().into(),
+            msg: msg.into(),
             context,
+            source: None,
         }
+    }
+
+    pub fn from_source(
+        source: impl Into<Box<dyn std::error::Error>>,
+        msg: impl Into<String>,
+        span: xml::StrSpan<'_>,
+    ) -> ParseError {
+        let mut e = ParseError::new(msg, span);
+        e.source = Some(source.into());
+        e
     }
 }
 

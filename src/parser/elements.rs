@@ -615,7 +615,7 @@ impl<'a> Element<'a> for ClipElement {
 
             self.file = Some(
                 load_audio_file(path, scene.samplerate, iterations).map_err(|e| {
-                    ParseError::new(format!("error loading audio file: {}", e), file_value)
+                    ParseError::from_source(e, "error loading audio file", file_value)
                 })?,
             );
         } else {
