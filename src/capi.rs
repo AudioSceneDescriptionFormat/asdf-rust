@@ -202,12 +202,11 @@ fn set_error_string(error: impl Display) {
 }
 
 fn set_error(error: &dyn std::error::Error) {
-    let mut error = error;
     let mut msg = String::new();
     write!(&mut msg, "{}", error).unwrap();
-    while let Some(source) = error.source() {
-        error = source;
-        write!(&mut msg, "\nerror details: {}", error).unwrap();
+    let sources = std::iter::successors(error.source(), |e| e.source());
+    for s in sources {
+        write!(&mut msg, "\nerror details: {}", s).unwrap();
     }
     set_error_string(msg);
 }
