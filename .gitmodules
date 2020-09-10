@@ -1,3 +1,6 @@
 [submodule "asdfspline"]
 	path = asdfspline
 	url = https://github.com/AudioSceneDescriptionFormat/asdfspline-rust.git
+[submodule "tests/asdf"]
+	path = tests/asdf
+	url = https://github.com/AudioSceneDescriptionFormat/asdf.git
