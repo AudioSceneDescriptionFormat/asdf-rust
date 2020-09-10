@@ -217,14 +217,14 @@ where
                 if copied_frames == 0 {
                     self.data.end_of_input = 1;
                 } else {
-                    self.data.input_frames += c_long::from(copied_frames);
+                    self.data.input_frames += copied_frames as c_long;
                 }
             }
 
             // Call libsamplerate to get new output data
 
             self.data.output_frames =
-                std::cmp::min(self.buffer_out.len() as u32 / channels, max_frames).into();
+                std::cmp::min(self.buffer_out.len() as u32 / channels, max_frames) as c_long;
             // http://www.mega-nerd.com/SRC/api_full.html#Process
             let result = unsafe { libsamplerate_sys::src_process(self.state, &mut self.data) };
             if result != 0 {
