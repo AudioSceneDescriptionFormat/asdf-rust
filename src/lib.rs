@@ -54,7 +54,7 @@ mod transform;
 #[cfg(cargo_c)]
 mod capi;
 
-use crate::parser::error::LoadError;
+pub use crate::parser::error::LoadError as SceneLoadError;
 use crate::streamer::FileStreamer;
 use crate::transform::Transform;
 
@@ -80,7 +80,7 @@ impl Scene {
         blocksize: u32,
         buffer_blocks: u32,
         sleeptime: Duration,
-    ) -> Result<Scene, LoadError> {
+    ) -> Result<Scene, SceneLoadError> {
         parser::load_scene(
             path.as_ref(),
             samplerate,
