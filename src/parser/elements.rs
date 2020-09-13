@@ -968,8 +968,10 @@ impl<'a> Element<'a> for TransformElement {
                 }
 
                 if node.closed_rot {
-                    assert!(!closed_pos);
                     assert!(!closed_rot);
+                    if !node.closed_pos {
+                        assert!(!closed_pos);
+                    }
                     closed_rot = true;
                     times_rot.push(time);
                 } else if let Some(rotation) = node.transform.rotation {
