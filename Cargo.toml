@@ -5,11 +5,6 @@ authors = ["Matthias Geier <Matthias.Geier@gmail.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
 
-[lib]
-path = "src/lib.rs"
-# work-around, see https://github.com/lu-zero/cargo-c/issues/34
-crate-type = ["lib", "staticlib"]
-
 [dependencies]
 asdfspline = { path = "asdfspline" }
 crossbeam = { git = "https://github.com/stjepang/crossbeam.git", rev = "d1736eff0834302e30bda0d259c920b6d7ed0a58" }
