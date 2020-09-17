@@ -38,9 +38,11 @@ jobs:
     - name: Run tests
       run: |
         cargo test
-    - name: Build C API
+    - name: Install cargo-c
       run: |
         cargo install cargo-c
+    - name: Build C API
+      run: |
         cargo cbuild --release
 
   check-code:
