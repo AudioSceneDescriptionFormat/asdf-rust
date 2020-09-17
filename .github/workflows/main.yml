@@ -41,6 +41,12 @@ jobs:
     - name: Install cargo-c
       run: |
         cargo install cargo-c
+    - name: Set MSVC/dumpbin path
+      if: matrix.toolchain-suffix == '-msvc'
+      run: |
+        $MsvcPath = vswhere -latest -products * -find "VC\Tools\MSVC\*\bin\Hostx64\x64" |
+                    Select-Object -Last 1
+        echo "::add-path::$MsvcPath"
     - name: Build C API
       run: |
         cargo cbuild --release
