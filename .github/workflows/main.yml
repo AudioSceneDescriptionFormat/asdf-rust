@@ -2,6 +2,8 @@ name: Build ASDF lib and run tests
 on: [push, pull_request]
 env:
   CARGO_TERM_COLOR: always
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
 jobs:
   build-and-test:
     strategy:
