@@ -983,8 +983,6 @@ impl<'a> Element<'a> for TransformElement {
                 // TODO: handle volume, ...
             }
 
-            // NB: if non-empty: first and last pos/rot must be given (checked in ASDF lib)
-
             if let Some(last_time) = self.nodes.last().unwrap().time {
                 if self.duration.is_some() {
                     return Err(ParseError::new(
@@ -1064,6 +1062,20 @@ impl<'a> Element<'a> for TransformElement {
                 pos_spline: if positions.is_empty() {
                     None
                 } else {
+                    let first_node = self.nodes.first().unwrap();
+                    if first_node.transform.translation.is_none() {
+                        return Err(ParseError::new(
+                            "If any <transform> node has \"pos\", the first one needs it as well",
+                            span,
+                        ));
+                    }
+                    let last_node = self.nodes.last().unwrap();
+                    if last_node.transform.translation.is_none() && !closed_pos {
+                        return Err(ParseError::new(
+                            "If any <transform> node has \"pos\", the last one needs it as well",
+                            span,
+                        ));
+                    }
                     Some(
                         AsdfPosSpline::new(positions, times_pos, speeds, tcb_pos, closed_pos)
                             .map_err(|e| {
@@ -1077,6 +1089,20 @@ impl<'a> Element<'a> for TransformElement {
                 rot_spline: if rotations.is_empty() {
                     None
                 } else {
+                    let first_node = self.nodes.first().unwrap();
+                    if first_node.transform.rotation.is_none() {
+                        return Err(ParseError::new(
+                            "If any <transform> node has \"rot\", the first one needs it as well",
+                            span,
+                        ));
+                    }
+                    let last_node = self.nodes.last().unwrap();
+                    if last_node.transform.rotation.is_none() && !closed_rot {
+                        return Err(ParseError::new(
+                            "If any <transform> node has \"rot\", the last one needs it as well",
+                            span,
+                        ));
+                    }
                     Some(
                         AsdfRotSpline::new(rotations, times_rot, tcb_rot, closed_rot).map_err(
                             |e| {
