@@ -1079,8 +1079,9 @@ impl<'a> Element<'a> for TransformElement {
                     Some(
                         AsdfPosSpline::new(positions, times_pos, speeds, tcb_pos, closed_pos)
                             .map_err(|e| {
-                                ParseError::new(
-                                    format!("Error creating ASDF position spline: {}", e),
+                                ParseError::from_source(
+                                    e,
+                                    "Error creating ASDF position spline",
                                     span,
                                 )
                             })?,
@@ -1106,8 +1107,9 @@ impl<'a> Element<'a> for TransformElement {
                     Some(
                         AsdfRotSpline::new(rotations, times_rot, tcb_rot, closed_rot).map_err(
                             |e| {
-                                ParseError::new(
-                                    format!("Error creating ASDF rotations spline: {}", e),
+                                ParseError::from_source(
+                                    e,
+                                    "Error creating ASDF rotations spline",
                                     span,
                                 )
                             },
@@ -1320,10 +1322,7 @@ trait ParseAttribute {
 impl ParseAttribute for NonZeroU64 {
     fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         NonZeroU64::from_str(span.as_str()).map_err(|e| {
-            ParseError::new(
-                format!("error parsing attribute as positive integer: {}", e),
-                span,
-            )
+            ParseError::from_source(e, "error parsing attribute as positive integer", span)
         })
     }
 }
@@ -1331,10 +1330,7 @@ impl ParseAttribute for NonZeroU64 {
 impl ParseAttribute for u32 {
     fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         u32::from_str(span.as_str()).map_err(|e| {
-            ParseError::new(
-                format!("error parsing attribute as non-negative integer: {}", e),
-                span,
-            )
+            ParseError::from_source(e, "error parsing attribute as non-negative integer", span)
         })
     }
 }
@@ -1342,10 +1338,7 @@ impl ParseAttribute for u32 {
 impl ParseAttribute for f32 {
     fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         f32::from_str(span.as_str()).map_err(|e| {
-            ParseError::new(
-                format!("error parsing attribute as decimal value(s): {}", e),
-                span,
-            )
+            ParseError::from_source(e, "error parsing attribute as decimal value(s)", span)
         })
     }
 }
@@ -1353,6 +1346,6 @@ impl ParseAttribute for f32 {
 impl ParseAttribute for Seconds {
     fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         Seconds::from_str(span.as_str())
-            .map_err(|e| ParseError::new(format!("invalid time value: {}", e), span))
+            .map_err(|e| ParseError::from_source(e, "invalid time value", span))
     }
 }
