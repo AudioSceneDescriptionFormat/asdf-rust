@@ -92,10 +92,11 @@ impl AsdfElement {
                 previous_child: String::new(),
             })
         } else {
-            Err(ParseError::new(
-                format!("Expected <asdf> as root element, not <{}>", name.as_str()),
+            parse_error!(
                 name,
-            ))
+                "Expected <asdf> as root element, not <{}>",
+                name.as_str()
+            )
         }
     }
 }
@@ -129,26 +130,20 @@ impl<'a> Element<'a> for AsdfElement {
                 if self.previous_child.is_empty() {
                     Ok(Box::new(HeadElement::new()) as Box<dyn Element<'_>>)
                 } else {
-                    Err(ParseError::new("No element is allowed before <head>", name))
+                    parse_error!(name, "No element is allowed before <head>")
                 }
             }
             "body" => {
                 if self.previous_child.is_empty() || self.previous_child == "head" {
                     Ok(Box::new(BodyElement::new()) as Box<dyn Element<'_>>)
                 } else {
-                    Err(ParseError::new(
-                        "Only a <head> element is allowed before <body>",
-                        name,
-                    ))
+                    parse_error!(name, "Only a <head> element is allowed before <body>")
                 }
             }
             _ => {
                 // <asdf> is an implicit <seq> (but only if there is no <body>):
                 if self.previous_child == "body" {
-                    Err(ParseError::new(
-                        "No elements are allowed after <body>",
-                        name,
-                    ))
+                    parse_error!(name, "No elements are allowed after <body>")
                 } else {
                     self.seq.open_child_element(name, parent_span)
                 }
@@ -216,20 +211,17 @@ impl<'a> Element<'a> for HeadElement {
         _parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         match name.as_str() {
-            "meta" => Err(ParseError::new("TODO: implement <meta> tags", name)),
+            "meta" => parse_error!(name, "TODO: implement <meta> tags"),
             "source" => Ok(Box::new(SourceElement::new())),
             "reference" => {
                 if self.reference {
-                    Err(ParseError::new("Only one <reference> is allowed", name))
+                    parse_error!(name, "Only one <reference> is allowed")
                 } else {
                     self.reference = true;
                     Ok(Box::new(ReferenceElement::new()))
                 }
             }
-            _ => Err(ParseError::new(
-                format!("No <{}> elements allowed in <head>", name.as_str()),
-                name,
-            )),
+            _ => parse_error!(name, "No <{}> elements allowed in <head>", name.as_str()),
         }
     }
 
@@ -632,19 +624,17 @@ impl<'a> Element<'a> for ClipElement {
                 }
                 Ok(Box::new(ChannelElement::default()))
             } else {
-                Err(ParseError::new(
-                    "No <channel> elements are allowed if <clip> has a \"source\" attribute",
+                parse_error!(
                     name,
-                ))
+                    "No <channel> elements are allowed if <clip> has a \"source\" attribute"
+                )
             }
         } else {
-            Err(ParseError::new(
-                format!(
-                    "Only <channel> elements are allowed in <clip>, not <{}>",
-                    name.as_str()
-                ),
+            parse_error!(
                 name,
-            ))
+                "Only <channel> elements are allowed in <clip>, not <{}>",
+                name.as_str()
+            )
         }
     }
 
@@ -844,13 +834,11 @@ impl<'a> Element<'a> for TransformElement {
         if name.as_str() == "o" {
             Ok(Box::new(TransformNodeElement::default()))
         } else {
-            Err(ParseError::new(
-                format!(
-                    "Only <o> elements are allowed in <transform>, not <{}>",
-                    name.as_str()
-                ),
+            parse_error!(
                 name,
-            ))
+                "Only <o> elements are allowed in <transform>, not <{}>",
+                name.as_str()
+            )
         }
     }
 
@@ -1110,10 +1098,7 @@ impl<'a> Element<'a> for TransformElement {
             scene.add_transformer(transformer, 0, duration, &self.targets, &mut transformers);
             parent.add_files_and_transformers(vec![], transformers, duration, span)
         } else {
-            Err(ParseError::new(
-                "Unable to infer <transform> duration",
-                span,
-            ))
+            parse_error!(span, "Unable to infer <transform> duration")
         }
     }
 }
@@ -1266,14 +1251,12 @@ fn child_in_container<'a>(
         "par" => Ok(Box::new(ParElement::new())),
         "clip" => Ok(Box::new(ClipElement::new())),
         "transform" => Ok(Box::new(TransformElement::new())),
-        _ => Err(ParseError::new(
-            format!(
-                "No <{}> element allowed in <{}>",
-                name.as_str(),
-                parent_span.as_str()
-            ),
+        _ => parse_error!(
             name,
-        )),
+            "No <{}> element allowed in <{}>",
+            name.as_str(),
+            parent_span.as_str()
+        ),
     }
 }
 
