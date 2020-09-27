@@ -127,6 +127,7 @@ impl Transformer for SplineTransformer {
     }
 }
 
+#[macro_export]
 macro_rules! parse_error {
     ($span:expr, $msg:expr) => {
         return Err(ParseError::new($msg, $span).into());
