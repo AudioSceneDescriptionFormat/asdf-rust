@@ -41,3 +41,51 @@ pub fn frames2seconds(frames: u64, samplerate: u32) -> Seconds {
     assert!(samplerate > 0);
     Seconds(frames as f32 / samplerate as f32)
 }
+
+/// Time value used in ASDF files.
+///
+/// Either given in seconds or in a fraction of its parent duration.
+#[derive(Clone, Copy)]
+pub enum XmlTime {
+    Seconds(Seconds),
+    Fraction(f32),
+}
+
+impl XmlTime {
+    pub fn resolve(self, total: Seconds) -> Seconds {
+        match self {
+            XmlTime::Seconds(s) => s,
+            XmlTime::Fraction(f) => Seconds(f * total.0),
+        }
+    }
+}
+
+impl FromStr for XmlTime {
+    type Err = ParseXmlTimeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim_end();
+
+        if let Some(s) = s.strip_suffix("%") {
+            let f = f32::from_str(s)? / 100.0;
+            // TODO: check valid range (>= 0; <= 100?)
+            Ok(XmlTime::Fraction(f))
+        } else {
+            let time = Seconds::from_str(s)?;
+            if time < Seconds(0.0) {
+                return Err(ParseXmlTimeError::NegativeSeconds);
+            }
+            Ok(XmlTime::Seconds(time))
+        }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ParseXmlTimeError {
+    #[error("error parsing time percentage")]
+    Percentage(#[from] std::num::ParseFloatError),
+    #[error("error parsing time string")]
+    Seconds(#[from] ParseSecondsError),
+    #[error("negative time values are not allowed")]
+    NegativeSeconds,
+}

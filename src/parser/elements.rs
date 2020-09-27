@@ -12,7 +12,7 @@ use crate::transform::{parse_pos, parse_rot, parse_transform, Transform, Vec3};
 use crate::{Source, Transformer, REFERENCE_ID};
 
 use super::error::ParseError;
-use super::time::{frames2seconds, seconds2frames, Seconds};
+use super::time::{frames2seconds, seconds2frames, Seconds, XmlTime};
 use super::{
     Attributes, ConstantTransformer, GetAttributeValue, PlaylistEntry, SceneInitializer,
     SplineTransformer, TransformerInstance,
@@ -872,6 +872,8 @@ impl<'a> Element<'a> for TransformElement {
         }
         assert!(!self.nodes.is_empty());
 
+        let transform_duration;
+
         let transformer = if self.nodes.len() == 1 {
             let node = self.nodes.pop().unwrap();
             if node.time.is_some() {
@@ -887,12 +889,39 @@ impl<'a> Element<'a> for TransformElement {
                     with a single transform node"
                 );
             }
+
+            if let Some(dur) = self.duration {
+                transform_duration = dur;
+            } else if let Some(duration_frames) = parent_duration_frames {
+                transform_duration = frames2seconds(duration_frames, scene.samplerate);
+            } else {
+                parse_error!(span, "Unable to infer <transform> duration")
+            }
             Box::new(ConstantTransformer {
                 id: self.id,
                 transform: node.transform,
             }) as Box<dyn Transformer>
         } else {
-            // TODO: get time from last node (or from parent)?
+            if let Some(last_time) = self.nodes.last().unwrap().time {
+                if self.duration.is_some() {
+                    parse_error!(
+                        span,
+                        "Last node cannot have \"time\" if <transform> has explicit duration"
+                    );
+                }
+                transform_duration = match last_time {
+                    XmlTime::Seconds(s) => s,
+                    XmlTime::Fraction(_) => {
+                        parse_error!(span, "Last node cannot have \"time\" percentage");
+                    }
+                }
+            } else if let Some(dur) = self.duration {
+                transform_duration = dur;
+            } else if let Some(duration_frames) = parent_duration_frames {
+                transform_duration = frames2seconds(duration_frames, scene.samplerate);
+            } else {
+                parse_error!(span, "Unable to infer time of last node");
+            }
 
             let mut positions = Vec::<Vec3>::new();
             let mut rotations = Vec::new();
@@ -905,7 +934,7 @@ impl<'a> Element<'a> for TransformElement {
             let mut closed_rot = false;
 
             for node in &self.nodes {
-                let time = node.time.map(|t| t.0);
+                let time = node.time.map(|t| t.resolve(transform_duration).0);
 
                 if node.closed_pos && node.closed_rot {
                     // This has been checked during parsing:
@@ -952,38 +981,21 @@ impl<'a> Element<'a> for TransformElement {
                 // TODO: handle volume, ...
             }
 
-            if let Some(last_time) = self.nodes.last().unwrap().time {
-                if self.duration.is_some() {
-                    parse_error!(
-                        span,
-                        "Last node cannot have \"time\" \
-                         if <transform> has explicit duration (for now)"
-                    );
-                }
-                // TODO: handle "begin" time?
-                self.duration = Some(last_time);
-            } else {
-                let last_time = if self.duration.is_some() {
-                    self.duration.map(|t| t.0)
-                } else if let Some(duration_frames) = parent_duration_frames {
-                    Some(frames2seconds(duration_frames, scene.samplerate).0)
-                } else {
-                    parse_error!(span, "Unable to infer time of last node");
-                };
-                if let [.., last] = &mut times_pos[..] {
-                    *last = last_time;
-                }
-                if let [.., last] = &mut times_rot[..] {
-                    *last = last_time;
-                }
-            }
             if let Some(first_time) = self.nodes.first().unwrap().time {
-                if first_time != Seconds(0.0) {
-                    // TODO: This is a temporary restriction until "begin" semantics are sorted out:
-                    parse_error!(
-                        span,
-                        "The first <transform> node is not allowed to have a time != 0 (for now)"
-                    );
+                match first_time {
+                    XmlTime::Seconds(s) => {
+                        // TODO: Temporary restriction until "begin" semantics are sorted out:
+                        if s != Seconds(0.0) {
+                            parse_error!(
+                                span,
+                                "The first <transform> node is not allowed \
+                                to have a time != 0 (for now)"
+                            );
+                        }
+                    }
+                    XmlTime::Fraction(_) => {
+                        parse_error!(span, "First node cannot have \"time\" percentage");
+                    }
                 }
             } else {
                 if let [first, ..] = &mut times_pos[..] {
@@ -993,6 +1005,17 @@ impl<'a> Element<'a> for TransformElement {
                     *first = Some(0.0);
                 }
             }
+            if let [.., last] = &mut times_pos[..] {
+                if last.is_none() {
+                    *last = Some(transform_duration.0);
+                }
+            }
+            if let [.., last] = &mut times_rot[..] {
+                if last.is_none() {
+                    *last = Some(transform_duration.0);
+                }
+            }
+
             if (positions.is_empty() || !closed_pos) && (rotations.is_empty() || !closed_rot) {
                 // NB: if both are empty, no TCB values should exist at all
                 let first_node = self.nodes.first().unwrap();
@@ -1089,23 +1112,16 @@ impl<'a> Element<'a> for TransformElement {
             }) as Box<dyn Transformer>
         };
 
-        if let Some(duration) = self
-            .duration
-            .map(|t| seconds2frames(t, scene.samplerate))
-            .or(parent_duration_frames)
-        {
-            let mut transformers = Vec::new();
-            scene.add_transformer(transformer, 0, duration, &self.targets, &mut transformers);
-            parent.add_files_and_transformers(vec![], transformers, duration, span)
-        } else {
-            parse_error!(span, "Unable to infer <transform> duration")
-        }
+        let frames = seconds2frames(transform_duration, scene.samplerate);
+        let mut transformers = Vec::new();
+        scene.add_transformer(transformer, 0, frames, &self.targets, &mut transformers);
+        parent.add_files_and_transformers(vec![], transformers, frames, span)
     }
 }
 
 #[derive(Default)]
 struct TransformNodeElement {
-    time: Option<Seconds>,
+    time: Option<XmlTime>,
     closed_pos: bool,
     closed_rot: bool,
     transform: Transform,
@@ -1127,9 +1143,6 @@ impl<'a> Element<'a> for TransformNodeElement {
         }
         if let Some(time_value) = attributes.get_value("time") {
             let time = parse_attribute(time_value)?;
-            if time < Seconds(0.0) {
-                parse_error!(time_value, "negative time values are not allowed");
-            }
             self.time = Some(time);
         }
         let mut pos = None;
@@ -1298,9 +1311,9 @@ impl ParseAttribute for f32 {
     }
 }
 
-impl ParseAttribute for Seconds {
+impl ParseAttribute for XmlTime {
     fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
-        Seconds::from_str(span.as_str())
+        XmlTime::from_str(span.as_str())
             .map_err(|e| ParseError::from_source(e, "invalid time value", span))
     }
 }
