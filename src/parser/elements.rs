@@ -65,10 +65,6 @@ pub trait Element<'a>: AsAny {
     }
 
     // NB: "span" is stored in "scene", therefore they must have matching lifetimes.
-    // TODO: can the borrowed Box be avoided?
-    // TODO: see https://github.com/rust-lang/rust-clippy/issues/3971
-    // TODO: see https://github.com/rust-lang/rust-clippy/issues/1845
-    #[allow(clippy::borrowed_box)]
     fn close(
         self: Box<Self>,
         span: xml::StrSpan<'a>,
