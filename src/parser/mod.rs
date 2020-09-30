@@ -311,6 +311,13 @@ pub fn load_scene(
         .for_each(|(source, activity)| {
             source.activity = activity.into_iter().map(|(_, _, idx)| idx).collect();
         });
+
+    for id in scene.transformer_map.keys() {
+        if id != REFERENCE_ID && !scene.all_ids.contains(id) {
+            parse_error!("".into(), "Non-existing ID used in \"apply-to\": {}", id);
+        }
+    }
+
     Ok(Scene {
         sources: scene.sources,
         streamer: scene.streamer.unwrap(),
@@ -411,7 +418,11 @@ impl<'a> SceneInitializer<'a> {
     /// This creates intentionally invalid XML IDs for internal use
     fn create_new_id(&mut self) -> String {
         self.current_id_suffix += 1;
-        format!(".asdf:{}", self.current_id_suffix)
+        let id = format!(".asdf:{}", self.current_id_suffix);
+        if !self.all_ids.insert(id.clone()) {
+            unreachable!("Non-unique auto-generated ID: {:?}", id);
+        }
+        id
     }
 
     fn get_id(&mut self, attributes: &mut Attributes<'_>) -> Result<Option<String>, ParseError> {
