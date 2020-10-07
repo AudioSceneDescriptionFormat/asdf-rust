@@ -107,62 +107,49 @@ pub unsafe extern "C" fn asdf_scene_new(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn asdf_scene_free(_: Option<Box<Scene>>) {}
+pub extern "C" fn asdf_scene_free(_: Option<Box<Scene>>) {}
 
 #[no_mangle]
-pub unsafe extern "C" fn asdf_scene_file_sources(scene: Option<Box<Scene>>) -> u32 {
-    scene.expect("NULL pointer").file_sources()
+pub extern "C" fn asdf_scene_file_sources(scene: &Scene) -> u32 {
+    scene.file_sources()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn asdf_scene_get_source(
-    scene: Option<Box<Scene>>,
-    index: usize,
-) -> Box<AsdfSource> {
-    Box::new(scene.expect("NULL pointer").get_source(index))
+pub extern "C" fn asdf_scene_get_source(scene: &Scene, index: usize) -> Box<AsdfSource> {
+    Box::new(scene.get_source(index))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn asdf_source_free(_: Option<Box<AsdfSource>>) {}
+pub extern "C" fn asdf_source_free(_: Option<Box<AsdfSource>>) {}
 
 #[no_mangle]
-pub unsafe extern "C" fn asdf_scene_get_source_transform(
-    scene: Option<Box<Scene>>,
+pub extern "C" fn asdf_scene_get_source_transform(
+    scene: &Scene,
     source_idx: usize,
     frame: u64,
 ) -> AsdfTransform {
-    scene
-        .expect("NULL pointer")
-        .get_source_transform(source_idx, frame)
-        .into()
+    scene.get_source_transform(source_idx, frame).into()
 }
 
 /// Reference transform is always "active".
 #[no_mangle]
-pub unsafe extern "C" fn asdf_scene_get_reference_transform(
-    scene: Option<Box<Scene>>,
-    frame: u64,
-) -> AsdfTransform {
-    scene
-        .expect("NULL pointer")
-        .get_reference_transform(frame)
-        .into()
+pub extern "C" fn asdf_scene_get_reference_transform(scene: &Scene, frame: u64) -> AsdfTransform {
+    scene.get_reference_transform(frame).into()
 }
 
 // TODO: possibility to report errors?
 #[no_mangle]
-pub unsafe extern "C" fn asdf_scene_seek(scene: Option<Box<Scene>>, frame: u64) -> bool {
-    scene.expect("NULL pointer").seek(frame)
+pub extern "C" fn asdf_scene_seek(scene: &mut Scene, frame: u64) -> bool {
+    scene.seek(frame)
 }
 
 /// Return value of `false` means un-recoverable error
 #[no_mangle]
 pub unsafe extern "C" fn asdf_scene_get_audio_data(
-    scene: Option<Box<Scene>>,
+    scene: &mut Scene,
     data: *const *mut f32,
     rolling: bool,
 ) -> bool {
-    let mut scene = scene.expect("NULL pointer");
     assert!(!data.is_null());
     let data = std::slice::from_raw_parts(data, scene.file_sources() as usize);
     let success = scene.get_audio_data(data, rolling);
