@@ -14,8 +14,8 @@ use crate::{Source, Transformer, REFERENCE_ID};
 use super::error::ParseError;
 use super::time::{frames2seconds, seconds2frames, Seconds, XmlTime};
 use super::{
-    Attributes, ConstantTransformer, GetAttributeValue, PlaylistEntry, SceneInitializer,
-    SplineTransformer, TransformerInstance,
+    Attributes, ConstantTransformer, GetAttributeValue, Iterations, PlaylistEntry,
+    SceneInitializer, SplineTransformer, TransformerInstance,
 };
 use crate::parse_error;
 
@@ -362,21 +362,17 @@ impl<'a> Element<'a> for BodyElement {
     }
 }
 
+#[derive(Default)]
 struct SeqElement {
     files: Vec<PlaylistEntry>,
     transformers: Vec<TransformerInstance>,
     end: u64,
-    iterations: NonZeroU64,
+    iterations: Iterations,
 }
 
 impl SeqElement {
     fn new() -> SeqElement {
-        SeqElement {
-            files: Vec::new(),
-            transformers: Vec::new(),
-            end: 0,
-            iterations: NonZeroU64::new(1).unwrap(),
-        }
+        Default::default()
     }
 }
 
@@ -446,27 +442,24 @@ impl<'a> Element<'a> for SeqElement {
                 }
             }));
         }
+        // TODO: self.end times iterations?
         parent
             .unwrap()
             .add_files_and_transformers(files, transformers, self.end, span)
     }
 }
 
+#[derive(Default)]
 struct ParElement {
     files: Vec<PlaylistEntry>,
     transformers: Vec<TransformerInstance>,
     duration_frames: Option<u64>,
-    iterations: NonZeroU64,
+    iterations: Iterations,
 }
 
 impl ParElement {
     fn new() -> ParElement {
-        ParElement {
-            files: Vec::new(),
-            transformers: Vec::new(),
-            duration_frames: None,
-            iterations: NonZeroU64::new(1).unwrap(),
-        }
+        Default::default()
     }
 }
 
@@ -533,6 +526,7 @@ impl<'a> Element<'a> for ParElement {
                 }
             }));
         }
+        // TODO: duration times iterations?
         parent
             .unwrap()
             .add_files_and_transformers(files, transformers, duration, span)?;
@@ -578,7 +572,7 @@ impl<'a> Element<'a> for ClipElement {
         let iterations = if let Some(repeat_value) = attributes.get_value("repeat") {
             parse_attribute(repeat_value)?
         } else {
-            NonZeroU64::new(1).unwrap()
+            Default::default()
         };
 
         if let Some(file_value) = attributes.get_value("file") {
@@ -785,6 +779,7 @@ struct TransformElement {
     targets: Vec<String>,
     transform: Option<Transform>,
     nodes: Vec<TransformNodeElement>,
+    iterations: Iterations,
 }
 
 impl TransformElement {
@@ -814,6 +809,10 @@ impl<'a> Element<'a> for TransformElement {
             parse_error!(span, "Attribute \"apply-to\" is required in <transform>");
         }
         self.transform = parse_transform(attributes)?;
+
+        if let Some(repeat_value) = attributes.get_value("repeat") {
+            self.iterations = parse_attribute(repeat_value)?;
+        }
 
         // TODO: allow specifying duration?
         // TODO: if duration is longer than enclosing <par> duration:
@@ -869,6 +868,7 @@ impl<'a> Element<'a> for TransformElement {
         assert!(!self.nodes.is_empty());
 
         let transform_duration;
+        let mut total_frames: Option<u64> = None;
 
         let transformer = if self.nodes.len() == 1 {
             let node = self.nodes.pop().unwrap();
@@ -889,7 +889,9 @@ impl<'a> Element<'a> for TransformElement {
             if let Some(dur) = self.duration {
                 transform_duration = dur;
             } else if let Some(duration_frames) = parent_duration_frames {
-                transform_duration = frames2seconds(duration_frames, scene.samplerate);
+                total_frames = Some(duration_frames);
+                let instance_duration = duration_frames / self.iterations.get();
+                transform_duration = frames2seconds(instance_duration, scene.samplerate);
             } else {
                 parse_error!(span, "Unable to infer <transform> duration")
             }
@@ -914,7 +916,9 @@ impl<'a> Element<'a> for TransformElement {
             } else if let Some(dur) = self.duration {
                 transform_duration = dur;
             } else if let Some(duration_frames) = parent_duration_frames {
-                transform_duration = frames2seconds(duration_frames, scene.samplerate);
+                total_frames = Some(duration_frames);
+                let instance_duration = duration_frames / self.iterations.get();
+                transform_duration = frames2seconds(instance_duration, scene.samplerate);
             } else {
                 parse_error!(span, "Unable to infer time of last node");
             }
@@ -1107,11 +1111,22 @@ impl<'a> Element<'a> for TransformElement {
                 samplerate: scene.samplerate,
             }) as Box<dyn Transformer>
         };
-
         let frames = seconds2frames(transform_duration, scene.samplerate);
+        let total_frames = total_frames.unwrap_or(frames * self.iterations.get());
         let mut transformers = Vec::new();
         scene.add_transformer(transformer, 0, frames, &self.targets, &mut transformers);
-        parent.add_files_and_transformers(vec![], transformers, frames, span)
+
+        let mut duplicated_transformers = Vec::new();
+        for i in 0..self.iterations.get() {
+            duplicated_transformers.extend(transformers.iter().cloned().map(|instance| {
+                TransformerInstance {
+                    begin: i * frames + instance.begin,
+                    ..instance
+                }
+            }));
+        }
+
+        parent.add_files_and_transformers(vec![], duplicated_transformers, total_frames, span)
     }
 }
 
@@ -1283,11 +1298,13 @@ trait ParseAttribute {
         Self: Sized;
 }
 
-impl ParseAttribute for NonZeroU64 {
+impl ParseAttribute for Iterations {
     fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
-        NonZeroU64::from_str(span.as_str()).map_err(|e| {
-            ParseError::from_source(e, "error parsing attribute as positive integer", span)
-        })
+        NonZeroU64::from_str(span.as_str())
+            .map_err(|e| {
+                ParseError::from_source(e, "error parsing attribute as positive integer", span)
+            })
+            .map(Iterations)
     }
 }
 

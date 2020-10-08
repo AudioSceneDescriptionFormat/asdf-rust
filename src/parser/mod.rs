@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -95,6 +96,20 @@ impl Transformer for ConstantTransformer {
 
     fn get_transform(&self, _frame: u64) -> Transform {
         self.transform.clone()
+    }
+}
+
+pub struct Iterations(NonZeroU64);
+
+impl Default for Iterations {
+    fn default() -> Iterations {
+        Iterations(NonZeroU64::new(1).unwrap())
+    }
+}
+
+impl Iterations {
+    pub fn get(&self) -> u64 {
+        self.0.get()
     }
 }
 

@@ -1,5 +1,6 @@
-use std::num::NonZeroU64;
 use std::ops::IndexMut;
+
+use crate::parser::Iterations;
 
 pub mod converter;
 pub mod dynamic;
@@ -96,11 +97,11 @@ pub trait Block {
 struct RepeatedAudioFile<F> {
     file: F,
     current_iteration: u64,
-    iterations: NonZeroU64,
+    iterations: Iterations,
 }
 
 impl<F> RepeatedAudioFile<F> {
-    fn new(file: F, iterations: NonZeroU64) -> RepeatedAudioFile<F> {
+    fn new(file: F, iterations: Iterations) -> RepeatedAudioFile<F> {
         RepeatedAudioFile {
             file,
             current_iteration: 0,

@@ -1,10 +1,10 @@
 use std::fs;
 use std::io;
-use std::num::NonZeroU64;
 use std::path::Path;
 
 use super::{converter, flac, mp3, vorbis, wav};
 use super::{AudioFileBasics, AudioFileBlocks, BoxedError, RepeatedAudioFile};
+use crate::parser::Iterations;
 
 /// Can be used with dynamic dispatch
 pub trait AudioFile: AudioFileBasics {
@@ -58,7 +58,7 @@ pub enum LoadError {
 pub fn load_audio_file<P>(
     path: P,
     samplerate: u32,
-    iterations: NonZeroU64,
+    iterations: Iterations,
 ) -> Result<Box<dyn AudioFile + Send + Sync>, LoadError>
 where
     P: AsRef<Path>,
@@ -120,7 +120,7 @@ where
 
 fn repeat_and_convert<F>(
     file: F,
-    iterations: NonZeroU64,
+    iterations: Iterations,
     samplerate: u32,
 ) -> Result<Box<dyn AudioFile + Send + Sync>, converter::LibSamplerateError>
 where
