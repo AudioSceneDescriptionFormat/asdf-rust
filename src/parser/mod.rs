@@ -91,8 +91,22 @@ impl Transformer for ConstantTransformer {
         self.id.as_ref()
     }
 
-    fn get_transform(&self, _frame: u64) -> Transform {
-        self.transform.clone()
+    fn get_transform(&self, _frame: u64) -> Option<Transform> {
+        Some(self.transform.clone())
+    }
+}
+
+struct EmptyTransformer {
+    id: Option<String>,
+}
+
+impl Transformer for EmptyTransformer {
+    fn id(&self) -> Option<&String> {
+        self.id.as_ref()
+    }
+
+    fn get_transform(&self, _frame: u64) -> Option<Transform> {
+        None
     }
 }
 
@@ -130,12 +144,12 @@ impl Transformer for SplineTransformer {
         self.id.as_ref()
     }
 
-    fn get_transform(&self, frame: u64) -> Transform {
+    fn get_transform(&self, frame: u64) -> Option<Transform> {
         let time = frames2seconds(frame, self.samplerate).0;
-        Transform {
+        Some(Transform {
             translation: self.pos_spline.as_ref().map(|s| s.evaluate(time)),
             rotation: self.rot_spline.as_ref().map(|s| s.evaluate(time)),
-        }
+        })
     }
 }
 

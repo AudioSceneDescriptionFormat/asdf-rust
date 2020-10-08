@@ -14,8 +14,8 @@ use crate::{Source, Transformer, REFERENCE_ID};
 use super::error::ParseError;
 use super::time::{frames2seconds, seconds2frames, Seconds, XmlTime};
 use super::{
-    Attributes, ConstantTransformer, GetAttributeValue, Iterations, PlaylistEntry,
-    SceneInitializer, SplineTransformer, TransformerInstance,
+    Attributes, ConstantTransformer, EmptyTransformer, GetAttributeValue, Iterations,
+    PlaylistEntry, SceneInitializer, SplineTransformer, TransformerInstance,
 };
 use crate::parse_error;
 
@@ -685,27 +685,34 @@ impl<'a> Element<'a> for ClipElement {
 
                 // <channel> transformer
 
-                let targets = vec![scene.sources[source_number].id.clone().unwrap()];
-                let _idx = scene.add_transformer(
+                let transformer = if let Some(transform) = channel.transform {
                     Box::new(ConstantTransformer {
                         id: Some(channel_id),
-                        transform: channel.transform.unwrap_or_default(),
-                    }),
-                    0,
-                    duration,
-                    &targets,
-                    &mut transformers,
-                );
+                        transform,
+                    }) as Box<dyn Transformer>
+                } else {
+                    Box::new(EmptyTransformer {
+                        id: Some(channel_id),
+                    }) as Box<dyn Transformer>
+                };
+                let targets = vec![scene.sources[source_number].id.clone().unwrap()];
+                let _idx =
+                    scene.add_transformer(transformer, 0, duration, &targets, &mut transformers);
             }
         }
 
         // <clip> transformer that applies to all <channel> elements
 
-        scene.add_transformer(
+        let transformer = if let Some(transform) = self.transform {
             Box::new(ConstantTransformer {
                 id: self.clip_id,
-                transform: self.transform.unwrap_or_default(),
-            }),
+                transform,
+            }) as Box<dyn Transformer>
+        } else {
+            Box::new(EmptyTransformer { id: self.clip_id }) as Box<dyn Transformer>
+        };
+        scene.add_transformer(
+            transformer,
             0,
             duration,
             &self.channel_ids,

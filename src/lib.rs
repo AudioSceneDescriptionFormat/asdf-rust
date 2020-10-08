@@ -125,12 +125,12 @@ impl Scene {
     pub fn get_source_transform(&self, source_idx: usize, frame: u64) -> Option<Transform> {
         // NB: This function is supposed to be realtime-safe!
         let source = &self.sources[source_idx];
-        let transform = self.get_transform_applying_to(source.id.as_ref(), frame);
-        if let Some(mut t) = source.transform.clone() {
-            t.apply(transform);
-            Some(t)
+        let t = self.get_transform_applying_to(source.id.as_ref(), frame);
+        if let Some(mut transform) = source.transform.clone() {
+            transform.apply(t);
+            Some(transform)
         } else {
-            transform
+            t
         }
     }
 
@@ -150,11 +150,16 @@ impl Scene {
 
         for &(begin, end) in activity.iter() {
             if begin <= frame && frame < end {
-                let mut result = transformer.get_transform(frame - begin);
+                let result = transformer.get_transform(frame - begin);
                 let id = transformer.id();
                 // TODO: Establish recursion limit! There might be circular dependencies!
-                result.apply(self.get_transform_applying_to(id, frame));
-                return Some(result);
+                let t = self.get_transform_applying_to(id, frame);
+                if let Some(mut result) = result {
+                    result.apply(t);
+                    return Some(result);
+                } else {
+                    return t;
+                }
             }
         }
         None
@@ -172,7 +177,7 @@ impl Scene {
 trait Transformer {
     fn id(&self) -> Option<&String>;
     /// begin and end is checked before calling this
-    fn get_transform(&self, frame: u64) -> Transform;
+    fn get_transform(&self, frame: u64) -> Option<Transform>;
 }
 
 #[derive(Default, Debug)]
