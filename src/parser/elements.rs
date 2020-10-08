@@ -442,10 +442,12 @@ impl<'a> Element<'a> for SeqElement {
                 }
             }));
         }
-        // TODO: self.end times iterations?
-        parent
-            .unwrap()
-            .add_files_and_transformers(files, transformers, self.end, span)
+        parent.unwrap().add_files_and_transformers(
+            files,
+            transformers,
+            self.end * self.iterations.get(),
+            span,
+        )
     }
 }
 
@@ -526,10 +528,12 @@ impl<'a> Element<'a> for ParElement {
                 }
             }));
         }
-        // TODO: duration times iterations?
-        parent
-            .unwrap()
-            .add_files_and_transformers(files, transformers, duration, span)?;
+        parent.unwrap().add_files_and_transformers(
+            files,
+            transformers,
+            duration * self.iterations.get(),
+            span,
+        )?;
         Ok(())
     }
 }
