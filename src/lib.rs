@@ -125,20 +125,13 @@ impl Scene {
     pub fn get_source_transform(&self, source_idx: usize, frame: u64) -> Option<Transform> {
         // NB: This function is supposed to be realtime-safe!
         let source = &self.sources[source_idx];
-
-        // Transforms applied to <clip> (and its <channel> elements)
-        let clip_transform = self.get_clip_transform(source, frame);
-
-        // TODO: what about live sources?
-        // If source is not active, we don't need to check other transforms
-        clip_transform.as_ref()?;
-
-        let mut source_transform = source.transform.clone();
-        source_transform.apply(Transform::merge(
-            clip_transform,
-            self.get_transform_applying_to(source.id.as_ref(), frame),
-        ));
-        Some(source_transform)
+        let transform = self.get_transform_applying_to(source.id.as_ref(), frame);
+        if let Some(mut t) = source.transform.clone() {
+            t.apply(transform);
+            Some(t)
+        } else {
+            transform
+        }
     }
 
     pub fn get_reference_transform(&self, frame: u64) -> Option<Transform> {
@@ -146,17 +139,6 @@ impl Scene {
         reference_transform
             .apply(self.get_transform_applying_to(Some(&REFERENCE_ID.into()), frame));
         Some(reference_transform)
-    }
-
-    // TODO: what about transforms of live sources?
-    fn get_clip_transform(&self, source: &Source, frame: u64) -> Option<Transform> {
-        for &idx in source.activity.iter() {
-            if let Some(transform) = self.get_transform_from(idx, frame) {
-                // NB: Only one of them can be active, so we don't need to look further
-                return Some(transform);
-            }
-        }
-        None
     }
 
     fn get_transform_from(&self, idx: usize, frame: u64) -> Option<Transform> {
@@ -195,12 +177,11 @@ trait Transformer {
 
 #[derive(Default, Debug)]
 struct Source {
+    // TODO: remove Option?
     id: Option<String>,
     name: Option<String>,
     model: Option<String>,
     /// Transform given in <head> element
-    transform: Transform,
-    /// List of transforms that define when source is active
-    activity: Box<[usize]>,
+    transform: Option<Transform>,
     // TODO: live or file source?
 }

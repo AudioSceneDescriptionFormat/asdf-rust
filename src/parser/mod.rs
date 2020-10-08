@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use asdfspline::{AsdfPosSpline, AsdfRotSpline, NormWrapper, Spline};
 use regex::Regex;
-use superslice::Ext; // for slice::lower_bound_by_key()
 use xmlparser as xml;
 
 use crate::audiofile::dynamic::AudioFile;
@@ -25,7 +24,7 @@ use time::frames2seconds;
 pub type FileStorage = Vec<(Box<dyn AudioFile + Send + Sync>, Box<[Option<usize>]>)>;
 
 #[derive(Default)]
-pub struct SceneInitializer<'a> {
+pub struct SceneInitializer {
     dir: PathBuf,
     samplerate: u32,
     blocksize: u32,
@@ -37,14 +36,12 @@ pub struct SceneInitializer<'a> {
     file_storage: FileStorage,
     transformer_storage: Vec<Box<dyn Transformer>>,
     transformer_instances: Vec<TransformerInstance>,
-    /// transformer index, source index, span (of closing <clip> tag)
-    channel_transformers: Vec<(usize, usize, xml::StrSpan<'a>)>,
     transformer_map: HashMap<String, Vec<usize>>,
     streamer: Option<FileStreamer>,
     reference_transform: Transform,
 }
 
-impl<'a> SceneInitializer<'a> {
+impl SceneInitializer {
     fn add_transformer(
         &mut self,
         transformer: Box<dyn Transformer>,
@@ -295,38 +292,6 @@ pub fn load_scene(
 
     // TODO: assert that transformer activities are sorted (they should be!?!)
 
-    let mut source_activity = Vec::<Vec<(u64, u64, usize)>>::new();
-    source_activity.resize(scene.sources.len(), Vec::new());
-
-    for (transform_idx, source_idx, span) in scene.channel_transformers {
-        let activity = &mut source_activity[source_idx];
-
-        for &(begin, end) in &transformer_activity[transform_idx] {
-            let idx = activity.lower_bound_by_key(&begin, |a| a.0);
-
-            if (idx > 0 && activity[idx - 1].1 > begin)
-                || (idx < activity.len() && activity[idx].0 < end)
-            {
-                parse_error!(
-                    span,
-                    "Clip overlap in source \"{}\"",
-                    scene.sources[source_idx]
-                        .id
-                        .as_ref()
-                        .expect("Overlap cannot happen in sources without ID")
-                )
-            }
-            activity.insert(idx, (begin, end, transform_idx))
-        }
-    }
-    scene
-        .sources
-        .iter_mut()
-        .zip(source_activity)
-        .for_each(|(source, activity)| {
-            source.activity = activity.into_iter().map(|(_, _, idx)| idx).collect();
-        });
-
     for id in scene.transformer_map.keys() {
         if id != REFERENCE_ID && !scene.all_ids.contains(id) {
             parse_error!("".into(), "Non-existing ID used in \"apply-to\": {}", id);
@@ -383,7 +348,7 @@ fn no_namespaces(prefix: xml::StrSpan<'_>) -> Result<(), ParseError> {
     }
 }
 
-impl<'a> SceneInitializer<'a> {
+impl SceneInitializer {
     /// https://www.w3.org/TR/xml-id/
     ///
     /// * the ID value matches the allowed lexical form,

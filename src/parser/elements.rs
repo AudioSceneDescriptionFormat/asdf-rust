@@ -39,7 +39,7 @@ pub trait Element<'a>: AsAny {
         &mut self,
         attributes: &mut Attributes<'_>,
         end_span: xml::StrSpan<'_>,
-        scene: &mut SceneInitializer<'_>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError>;
 
     fn open_child_element(
@@ -69,7 +69,7 @@ pub trait Element<'a>: AsAny {
         self: Box<Self>,
         span: xml::StrSpan<'a>,
         parent: Option<&mut Box<dyn Element<'_>>>,
-        scene: &mut SceneInitializer<'a>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError>;
 }
 
@@ -102,7 +102,7 @@ impl<'a> Element<'a> for AsdfElement {
         &mut self,
         attributes: &mut Attributes<'_>,
         span: xml::StrSpan<'_>,
-        _scene: &mut SceneInitializer<'_>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(value) = attributes.get_value("version") {
             if value.as_str().trim() == "0.4" {
@@ -164,7 +164,7 @@ impl<'a> Element<'a> for AsdfElement {
         self: Box<Self>,
         _span: xml::StrSpan<'a>,
         parent: Option<&mut Box<dyn Element<'_>>>,
-        scene: &mut SceneInitializer<'a>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         assert!(parent.is_none());
         scene.transformer_instances = self.seq.transformers;
@@ -195,7 +195,7 @@ impl<'a> Element<'a> for HeadElement {
         &mut self,
         _attributes: &mut Attributes<'_>,
         _span: xml::StrSpan<'_>,
-        _scene: &mut SceneInitializer<'_>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         // No attributes are allowed
         Ok(())
@@ -225,7 +225,7 @@ impl<'a> Element<'a> for HeadElement {
         self: Box<Self>,
         _span: xml::StrSpan<'a>,
         _parent: Option<&mut Box<dyn Element<'_>>>,
-        _scene: &mut SceneInitializer<'a>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         Ok(())
     }
@@ -244,21 +244,17 @@ impl<'a> Element<'a> for SourceElement {
         &mut self,
         attributes: &mut Attributes<'_>,
         _span: xml::StrSpan<'_>,
-        scene: &mut SceneInitializer<'_>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         let id = scene.get_id(attributes)?;
-
+        // TODO: source without ID is only allowed for live sources!
         let name = attributes.get_value("name").map(|v| v.to_string());
         let model = attributes.get_value("model").map(|v| v.to_string());
-
-        // TODO: source without ID is only allowed for live sources!
-
-        let transform = parse_transform(attributes)?.unwrap_or_default();
+        let transform = parse_transform(attributes)?;
         scene.sources.push(Source {
             id,
             name,
             model,
-            activity: Default::default(),
             transform,
         });
         Ok(())
@@ -268,7 +264,7 @@ impl<'a> Element<'a> for SourceElement {
         self: Box<Self>,
         _span: xml::StrSpan<'a>,
         _parent: Option<&mut Box<dyn Element<'_>>>,
-        _scene: &mut SceneInitializer<'a>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         // TODO: disallow <source/> with no attributes?
         Ok(())
@@ -288,7 +284,7 @@ impl<'a> Element<'a> for ReferenceElement {
         &mut self,
         attributes: &mut Attributes<'_>,
         _span: xml::StrSpan<'_>,
-        scene: &mut SceneInitializer<'_>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(id) = attributes.get_value("id") {
             if id.as_str() != REFERENCE_ID {
@@ -303,7 +299,7 @@ impl<'a> Element<'a> for ReferenceElement {
         self: Box<Self>,
         _span: xml::StrSpan<'a>,
         _parent: Option<&mut Box<dyn Element<'_>>>,
-        _scene: &mut SceneInitializer<'a>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         // TODO: disallow <reference/> with no attributes?
         Ok(())
@@ -327,7 +323,7 @@ impl<'a> Element<'a> for BodyElement {
         &mut self,
         _attributes: &mut Attributes<'_>,
         _span: xml::StrSpan<'_>,
-        _scene: &mut SceneInitializer<'_>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         // No attributes are allowed
         Ok(())
@@ -356,7 +352,7 @@ impl<'a> Element<'a> for BodyElement {
         self: Box<Self>,
         span: xml::StrSpan<'a>,
         parent: Option<&mut Box<dyn Element<'_>>>,
-        scene: &mut SceneInitializer<'a>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         Box::new(self.seq).close(span, parent, scene)
     }
@@ -381,7 +377,7 @@ impl<'a> Element<'a> for SeqElement {
         &mut self,
         attributes: &mut Attributes<'_>,
         _span: xml::StrSpan<'_>,
-        _scene: &mut SceneInitializer<'_>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(repeat_value) = attributes.get_value("repeat") {
             self.iterations = parse_attribute(repeat_value)?;
@@ -426,7 +422,7 @@ impl<'a> Element<'a> for SeqElement {
         self: Box<Self>,
         span: xml::StrSpan<'a>,
         parent: Option<&mut Box<dyn Element<'_>>>,
-        _scene: &mut SceneInitializer<'a>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         let mut files = Vec::new();
         let mut transformers = Vec::new();
@@ -470,7 +466,7 @@ impl<'a> Element<'a> for ParElement {
         &mut self,
         attributes: &mut Attributes<'_>,
         _span: xml::StrSpan<'_>,
-        _scene: &mut SceneInitializer<'_>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(repeat_value) = attributes.get_value("repeat") {
             self.iterations = parse_attribute(repeat_value)?;
@@ -511,7 +507,7 @@ impl<'a> Element<'a> for ParElement {
         self: Box<Self>,
         span: xml::StrSpan<'a>,
         parent: Option<&mut Box<dyn Element<'_>>>,
-        _scene: &mut SceneInitializer<'a>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         let duration = self.duration_frames.unwrap_or_default();
         let mut files = Vec::new();
@@ -563,7 +559,7 @@ impl<'a> Element<'a> for ClipElement {
         &mut self,
         attributes: &mut Attributes<'_>,
         span: xml::StrSpan<'_>,
-        scene: &mut SceneInitializer<'_>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         self.clip_id = scene.get_id(attributes)?;
         self.source_id = scene.get_source_id(attributes)?;
@@ -636,7 +632,7 @@ impl<'a> Element<'a> for ClipElement {
         mut self: Box<Self>,
         span: xml::StrSpan<'a>,
         parent: Option<&mut Box<dyn Element<'_>>>,
-        scene: &mut SceneInitializer<'a>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         let file = self.file.take().unwrap();
         let duration = file.frames();
@@ -678,6 +674,7 @@ impl<'a> Element<'a> for ClipElement {
                         .unwrap()
                 } else {
                     scene.sources.push(Default::default());
+                    scene.sources.last_mut().unwrap().id = Some(scene.create_new_id());
                     scene.sources.len() - 1
                 };
                 self.channel_map.push(Some(source_number));
@@ -688,8 +685,8 @@ impl<'a> Element<'a> for ClipElement {
 
                 // <channel> transformer
 
-                let targets = vec![];
-                let idx = scene.add_transformer(
+                let targets = vec![scene.sources[source_number].id.clone().unwrap()];
+                let _idx = scene.add_transformer(
                     Box::new(ConstantTransformer {
                         id: Some(channel_id),
                         transform: channel.transform.unwrap_or_default(),
@@ -699,7 +696,6 @@ impl<'a> Element<'a> for ClipElement {
                     &targets,
                     &mut transformers,
                 );
-                scene.channel_transformers.push((idx, source_number, span));
             }
         }
 
@@ -741,7 +737,7 @@ impl<'a> Element<'a> for ChannelElement {
         &mut self,
         attributes: &mut Attributes<'_>,
         _span: xml::StrSpan<'_>,
-        scene: &mut SceneInitializer<'_>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(skip) = attributes.get_value("skip") {
             self.skip = Some(parse_attribute(skip)?);
@@ -764,7 +760,7 @@ impl<'a> Element<'a> for ChannelElement {
         self: Box<Self>,
         _span: xml::StrSpan<'a>,
         parent: Option<&mut Box<dyn Element<'_>>>,
-        _scene: &mut SceneInitializer<'a>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         let parent = parent.unwrap();
         let clip = (**parent)
@@ -797,7 +793,7 @@ impl<'a> Element<'a> for TransformElement {
         &mut self,
         attributes: &mut Attributes<'_>,
         span: xml::StrSpan<'_>,
-        scene: &mut SceneInitializer<'_>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         self.id = scene.get_id(attributes)?;
         if let Some(apply_to) = attributes.get_value("apply-to") {
@@ -845,7 +841,7 @@ impl<'a> Element<'a> for TransformElement {
         mut self: Box<Self>,
         span: xml::StrSpan<'a>,
         parent: Option<&mut Box<dyn Element<'_>>>,
-        scene: &mut SceneInitializer<'a>,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         assert!(!self.targets.is_empty());
 
@@ -1151,7 +1147,7 @@ impl<'a> Element<'a> for TransformNodeElement {
         &mut self,
         attributes: &mut Attributes<'_>,
         span: xml::StrSpan<'_>,
-        _scene: &mut SceneInitializer<'_>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if attributes.is_empty() {
             parse_error!(span, "empty <o> elements are not allowed");
@@ -1250,7 +1246,7 @@ impl<'a> Element<'a> for TransformNodeElement {
         self: Box<Self>,
         span: xml::StrSpan<'a>,
         parent: Option<&mut Box<dyn Element<'_>>>,
-        _scene: &mut SceneInitializer<'a>,
+        _scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         let parent = parent.unwrap();
         let parent = (**parent)

@@ -19,7 +19,6 @@ minimp3_ex-sys = { version = "0.1", features = ["float-output"] }
 nalgebra = "0.21"
 ogg-sys = "*"
 regex = "1"
-superslice = "1"
 thiserror = "1.0"
 vorbis-sys = "0.1"
 vorbisfile-sys = "*"
