@@ -3,8 +3,18 @@ use std::str::FromStr;
 
 use regex::Regex;
 
+use super::Iterations;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
 pub struct Seconds(pub f32);
+
+impl std::ops::Div<Iterations> for Seconds {
+    type Output = Seconds;
+
+    fn div(self, rhs: Iterations) -> Seconds {
+        Seconds(self.0 / rhs.get() as f32)
+    }
+}
 
 #[derive(thiserror::Error, Debug)]
 #[error("error parsing time string")]

@@ -110,6 +110,7 @@ impl Transformer for EmptyTransformer {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct Iterations(NonZeroU64);
 
 impl Default for Iterations {

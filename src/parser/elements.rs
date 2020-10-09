@@ -84,7 +84,7 @@ impl AsdfElement {
         if name.as_str() == "asdf" {
             Ok(AsdfElement {
                 version: String::new(),
-                seq: SeqElement::new(),
+                seq: SeqElement::new(None),
                 previous_child: String::new(),
             })
         } else {
@@ -313,7 +313,7 @@ struct BodyElement {
 impl BodyElement {
     pub fn new() -> BodyElement {
         BodyElement {
-            seq: SeqElement::new(),
+            seq: SeqElement::new(None),
         }
     }
 }
@@ -362,13 +362,18 @@ impl<'a> Element<'a> for BodyElement {
 struct SeqElement {
     files: Vec<PlaylistEntry>,
     transformers: Vec<TransformerInstance>,
+    /// End of current iteration
     end: u64,
+    parent_duration: Option<Seconds>,
     iterations: Iterations,
 }
 
 impl SeqElement {
-    fn new() -> SeqElement {
-        Default::default()
+    fn new(parent_duration: Option<Seconds>) -> SeqElement {
+        SeqElement {
+            parent_duration,
+            ..Default::default()
+        }
     }
 }
 
@@ -390,7 +395,11 @@ impl<'a> Element<'a> for SeqElement {
         name: xml::StrSpan<'_>,
         parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
-        child_in_container(name, parent_span)
+        child_in_container(
+            name,
+            parent_span,
+            self.parent_duration.map(|d| d / self.iterations),
+        )
     }
 
     fn add_files_and_transformers(
@@ -449,15 +458,21 @@ impl<'a> Element<'a> for SeqElement {
 
 #[derive(Default)]
 struct ParElement {
+    parent_duration: Option<Seconds>,
     files: Vec<PlaylistEntry>,
     transformers: Vec<TransformerInstance>,
+    /// Duration of a single iteration
     duration_frames: Option<u64>,
     iterations: Iterations,
+    samplerate: u32,
 }
 
 impl ParElement {
-    fn new() -> ParElement {
-        Default::default()
+    fn new(parent_duration: Option<Seconds>) -> ParElement {
+        ParElement {
+            parent_duration,
+            ..Default::default()
+        }
     }
 }
 
@@ -466,11 +481,13 @@ impl<'a> Element<'a> for ParElement {
         &mut self,
         attributes: &mut Attributes<'_>,
         _span: xml::StrSpan<'_>,
-        _scene: &mut SceneInitializer,
+        scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         if let Some(repeat_value) = attributes.get_value("repeat") {
             self.iterations = parse_attribute(repeat_value)?;
         }
+        // TODO: better way to access samplerate?
+        self.samplerate = scene.samplerate;
         Ok(())
     }
 
@@ -479,7 +496,11 @@ impl<'a> Element<'a> for ParElement {
         name: xml::StrSpan<'_>,
         parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
-        child_in_container(name, parent_span)
+        let parent_duration = self
+            .duration_frames
+            .map(|f| Seconds(f as f32 / self.samplerate as f32))
+            .or_else(|| self.parent_duration.map(|d| d / self.iterations));
+        child_in_container(name, parent_span, parent_duration)
     }
 
     fn add_files_and_transformers(
@@ -783,6 +804,7 @@ impl<'a> Element<'a> for ChannelElement {
 struct TransformElement {
     id: Option<String>,
     duration: Option<Seconds>,
+    parent_duration: Option<Seconds>,
     targets: Vec<String>,
     transform: Option<Transform>,
     nodes: Vec<TransformNodeElement>,
@@ -790,8 +812,11 @@ struct TransformElement {
 }
 
 impl TransformElement {
-    fn new() -> TransformElement {
-        Default::default()
+    fn new(parent_duration: Option<Seconds>) -> TransformElement {
+        TransformElement {
+            parent_duration,
+            ..Default::default()
+        }
     }
 }
 
@@ -820,8 +845,22 @@ impl<'a> Element<'a> for TransformElement {
         if let Some(repeat_value) = attributes.get_value("repeat") {
             self.iterations = parse_attribute(repeat_value)?;
         }
+        if let Some(dur_value) = attributes.get_value("dur") {
+            self.duration = match parse_attribute(dur_value)? {
+                XmlTime::Seconds(s) => Some(s),
+                XmlTime::Fraction(f) => {
+                    if let Some(parent_duration) = self.parent_duration {
+                        Some(Seconds(f * (parent_duration / self.iterations).0))
+                    } else {
+                        parse_error!(
+                            dur_value,
+                            "Could not infer parent duration to resolve percentage"
+                        );
+                    }
+                }
+            }
+        }
 
-        // TODO: allow specifying duration?
         // TODO: if duration is longer than enclosing <par> duration:
         //       do nothing special, this is caught later
 
@@ -854,12 +893,19 @@ impl<'a> Element<'a> for TransformElement {
 
         let parent = parent.unwrap();
 
-        let parent_duration_frames =
-            if let Some(par) = (**parent).as_any().downcast_ref::<ParElement>() {
-                par.duration_frames
+        let parent_any = (**parent).as_any();
+        let max_frames = if let Some(par) = parent_any.downcast_ref::<ParElement>() {
+            par.duration_frames
+        } else if let Some(seq) = parent_any.downcast_ref::<SeqElement>() {
+            if let Some(parent_duration) = seq.parent_duration.map(|d| d / seq.iterations) {
+                let duration_frames = (parent_duration.0 * scene.samplerate as f32) as u64;
+                Some(duration_frames.saturating_sub(seq.end))
             } else {
                 None
-            };
+            }
+        } else {
+            None
+        };
 
         if self.nodes.is_empty() {
             self.nodes.push(TransformNodeElement {
@@ -895,10 +941,14 @@ impl<'a> Element<'a> for TransformElement {
 
             if let Some(dur) = self.duration {
                 transform_duration = dur;
-            } else if let Some(duration_frames) = parent_duration_frames {
+
+            // TODO: define total_frames?
+
+            // TODO: check if dur * iterations <= max_frames
+            } else if let Some(duration_frames) = max_frames {
+                let total_duration = frames2seconds(duration_frames, scene.samplerate);
+                transform_duration = total_duration / self.iterations;
                 total_frames = Some(duration_frames);
-                let instance_duration = duration_frames / self.iterations.get();
-                transform_duration = frames2seconds(instance_duration, scene.samplerate);
             } else {
                 parse_error!(span, "Unable to infer <transform> duration")
             }
@@ -922,10 +972,10 @@ impl<'a> Element<'a> for TransformElement {
                 }
             } else if let Some(dur) = self.duration {
                 transform_duration = dur;
-            } else if let Some(duration_frames) = parent_duration_frames {
+            } else if let Some(duration_frames) = max_frames {
+                let total_duration = frames2seconds(duration_frames, scene.samplerate);
+                transform_duration = total_duration / self.iterations;
                 total_frames = Some(duration_frames);
-                let instance_duration = duration_frames / self.iterations.get();
-                transform_duration = frames2seconds(instance_duration, scene.samplerate);
             } else {
                 parse_error!(span, "Unable to infer time of last node");
             }
@@ -1276,12 +1326,14 @@ impl<'a> Element<'a> for TransformNodeElement {
 fn child_in_container<'a>(
     name: xml::StrSpan<'_>,
     parent_span: xml::StrSpan<'_>,
+    parent_duration: Option<Seconds>,
 ) -> Result<Box<dyn Element<'a>>, ParseError> {
     match name.as_str() {
-        "seq" => Ok(Box::new(SeqElement::new())),
-        "par" => Ok(Box::new(ParElement::new())),
+        "seq" => Ok(Box::new(SeqElement::new(parent_duration))),
+        "par" => Ok(Box::new(ParElement::new(parent_duration))),
+        // TODO: pass parent_duration?
         "clip" => Ok(Box::new(ClipElement::new())),
-        "transform" => Ok(Box::new(TransformElement::new())),
+        "transform" => Ok(Box::new(TransformElement::new(parent_duration))),
         _ => parse_error!(
             name,
             "No <{}> element allowed in <{}>",
