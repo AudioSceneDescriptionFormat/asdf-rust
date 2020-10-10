@@ -941,11 +941,17 @@ impl<'a> Element<'a> for TransformElement {
 
             if let Some(dur) = self.duration {
                 transform_duration = dur;
-
             // TODO: define total_frames?
-
             // TODO: check if dur * iterations <= max_frames
             } else if let Some(duration_frames) = max_frames {
+                // TODO: code re-use, see below
+                if duration_frames == 0 {
+                    // TODO: this error message only makes sense inside a <seq> element
+                    parse_error!(
+                        span,
+                        "Zero-length <transform>, try shortening preceding element"
+                    );
+                }
                 let total_duration = frames2seconds(duration_frames, scene.samplerate);
                 transform_duration = total_duration / self.iterations;
                 total_frames = Some(duration_frames);
@@ -973,6 +979,12 @@ impl<'a> Element<'a> for TransformElement {
             } else if let Some(dur) = self.duration {
                 transform_duration = dur;
             } else if let Some(duration_frames) = max_frames {
+                if duration_frames == 0 {
+                    parse_error!(
+                        span,
+                        "Zero-length <transform>, try shortening preceding element"
+                    );
+                }
                 let total_duration = frames2seconds(duration_frames, scene.samplerate);
                 transform_duration = total_duration / self.iterations;
                 total_frames = Some(duration_frames);
