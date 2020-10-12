@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::convert::TryInto as _;
 use std::fs;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
@@ -18,7 +19,7 @@ pub mod error;
 mod time;
 
 use elements::{AsdfElement, Element};
-use error::{LoadError, ParseError};
+use error::{IntegrityError, LoadError, ParseError};
 use time::frames2seconds;
 
 pub type FileStorage = Vec<(Box<dyn AudioFile + Send + Sync>, Box<[Option<usize>]>)>;
@@ -296,39 +297,53 @@ pub fn load_scene(
         // See https://github.com/RazrFalcon/xmlparser/issues/8
         parse_error!(file_data.as_str().into(), "Missing XML root element")
     }
+    scene.try_into()
+}
 
-    let mut transformer_activity = Vec::new();
-    transformer_activity.resize(scene.transformer_storage.len(), Vec::new());
+impl std::convert::TryFrom<SceneInitializer> for Scene {
+    type Error = LoadError;
 
-    for instance in &scene.transformer_instances {
-        transformer_activity[instance.idx]
-            .push((instance.begin, instance.begin + instance.duration));
-    }
-
-    // TODO: assert that transformer activities are sorted (they should be!?!)
-
-    for id in scene.transformer_map.keys() {
-        if id != REFERENCE_ID && !scene.all_ids.contains(id) {
-            parse_error!("".into(), "Non-existing ID used in \"apply-to\": {}", id);
+    fn try_from(scene: SceneInitializer) -> Result<Self, Self::Error> {
+        for id in scene.transformer_map.keys() {
+            if id != REFERENCE_ID && !scene.all_ids.contains(id) {
+                return Err(IntegrityError::NonExistingId(id.clone()).into());
+            }
         }
-    }
 
-    Ok(Scene {
-        sources: scene.sources,
-        streamer: scene.streamer.unwrap(),
-        transformers: scene
-            .transformer_storage
-            .into_iter()
-            .zip(transformer_activity)
-            .map(|(t, a)| (t, a.into()))
-            .collect(),
-        transformer_map: scene
-            .transformer_map
-            .into_iter()
-            .map(|(k, v)| (k, v.into()))
-            .collect(),
-        reference_transform: scene.reference_transform,
-    })
+        let mut transformer_activity = Vec::new();
+        transformer_activity.resize(scene.transformer_storage.len(), Vec::new());
+
+        for instance in &scene.transformer_instances {
+            transformer_activity[instance.idx]
+                .push((instance.begin, instance.begin + instance.duration));
+        }
+
+        // TODO: assert that transformer activities are sorted (they should be!?!)
+
+        let scene = Scene {
+            sources: scene.sources,
+            streamer: scene.streamer.unwrap(),
+            transformers: scene
+                .transformer_storage
+                .into_iter()
+                .zip(transformer_activity)
+                .map(|(t, a)| (t, a.into()))
+                .collect(),
+            transformer_map: scene
+                .transformer_map
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            reference_transform: scene.reference_transform,
+        };
+        for source in &scene.sources {
+            if let Some(id) = &source.id {
+                scene.check_integrity(&id)?;
+            }
+        }
+        scene.check_integrity("reference")?;
+        Ok(scene)
+    }
 }
 
 pub type Attributes<'a> = Vec<(xml::StrSpan<'a>, xml::StrSpan<'a>)>;
@@ -452,5 +467,76 @@ impl SceneInitializer {
         } else {
             Ok(None)
         }
+    }
+}
+
+impl Scene {
+    /// Check reference cycles and overlapping rotations.
+    fn check_integrity(&self, id: &str) -> Result<(), IntegrityError> {
+        if let Some(transformer_indices) = self.transformer_map.get(id) {
+            let transformers: Vec<_> = transformer_indices
+                .iter()
+                .map(|&idx| &self.transformers[idx])
+                .collect();
+
+            for (transformer, _activity) in &transformers {
+                // TODO: detect reference cycles
+
+                if let Some(id) = transformer.id() {
+                    // TODO: check only relevant time interval
+                    self.check_integrity(id)?;
+                }
+            }
+
+            // Check for overlapping rotations
+            for i in 0..transformers.len() {
+                let (transformer_i, activity_i) = transformers[i];
+                for (transformer_j, activity_j) in transformers.iter().skip(i + 1) {
+                    // TODO: possible early return(s) if activity is sorted?
+                    for &(begin_i, end_i) in activity_i.iter() {
+                        for &(begin_j, end_j) in activity_j.iter() {
+                            if begin_i < end_j && begin_j < end_i {
+                                let begin = begin_i.max(begin_j);
+                                let end = end_i.min(end_i);
+                                if self.has_rotation(&**transformer_i, begin, end)
+                                    && self.has_rotation(&**transformer_j, begin, end)
+                                {
+                                    return Err(IntegrityError::MultipleRotations(id.to_owned()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // No need to check reference cycles, because they have been checked in check_integrity()
+    fn has_rotation(&self, transformer: &dyn Transformer, begin: u64, end: u64) -> bool {
+        // Check given transformer
+        if let Some(Transform {
+            rotation: Some(_), ..
+        }) = transformer.get_transform(0)
+        {
+            return true;
+        }
+        // Recursively check transformers that apply to the given transformer
+        if let Some(id) = transformer.id() {
+            if let Some(transformer_indices) = self.transformer_map.get(id) {
+                for &idx in transformer_indices.iter() {
+                    let (transformer, activity) = &self.transformers[idx];
+                    for &(begin_i, end_i) in activity.iter() {
+                        if begin < end_i
+                            && begin_i < end
+                            && self.has_rotation(&**transformer, begin.max(begin_i), end.min(end_i))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 }

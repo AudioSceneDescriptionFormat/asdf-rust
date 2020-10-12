@@ -30,8 +30,8 @@ impl Transform {
         if let Some(one) = one {
             Some(if let Some(two) = two {
                 if one.rotation.is_some() && two.rotation.is_some() {
-                    // TODO: This should be checked when loading the file
-                    panic!("Multiple rotations at once");
+                    // This is checked for when loading the scene
+                    unreachable!("Multiple rotations at once");
                 }
                 Transform {
                     rotation: one.rotation.xor(two.rotation),

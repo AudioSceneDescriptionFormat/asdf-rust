@@ -95,9 +95,18 @@ impl ParseError {
 }
 
 #[derive(thiserror::Error, Debug)]
+pub enum IntegrityError {
+    #[error("Non-existing ID used in \"apply-to\": {:?}", .0)]
+    NonExistingId(String),
+    #[error("Multiple rotations applying to ID {:?}", .0)]
+    MultipleRotations(String),
+}
+
+#[derive(thiserror::Error, Debug)]
 #[error(transparent)]
 pub enum LoadError {
     ReadFile(#[from] io::Error),
     Tokenize(#[from] xml::Error),
     Parse(#[from] ParseError),
+    CheckIntegrity(#[from] IntegrityError),
 }
