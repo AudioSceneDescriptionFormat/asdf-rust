@@ -338,10 +338,10 @@ impl std::convert::TryFrom<SceneInitializer> for Scene {
         };
         for source in &scene.sources {
             if let Some(id) = &source.id {
-                scene.check_integrity(&id)?;
+                scene.check_integrity(&id, HashSet::new())?;
             }
         }
-        scene.check_integrity("reference")?;
+        scene.check_integrity("reference", HashSet::new())?;
         Ok(scene)
     }
 }
@@ -472,19 +472,27 @@ impl SceneInitializer {
 
 impl Scene {
     /// Check reference cycles and overlapping rotations.
-    fn check_integrity(&self, id: &str) -> Result<(), IntegrityError> {
+    fn check_integrity(
+        &self,
+        id: &str,
+        already_checked: HashSet<String>,
+    ) -> Result<(), IntegrityError> {
         if let Some(transformer_indices) = self.transformer_map.get(id) {
             let transformers: Vec<_> = transformer_indices
                 .iter()
                 .map(|&idx| &self.transformers[idx])
                 .collect();
 
-            for (transformer, _activity) in &transformers {
-                // TODO: detect reference cycles
+            if already_checked.contains(id) {
+                return Err(IntegrityError::CyclicDependency(id.to_owned()));
+            }
+            let mut already_checked = already_checked;
+            already_checked.insert(id.to_owned());
 
+            for (transformer, _activity) in &transformers {
                 if let Some(id) = transformer.id() {
-                    // TODO: check only relevant time interval
-                    self.check_integrity(id)?;
+                    // TODO: less expensive cycle check?
+                    self.check_integrity(id, already_checked.clone())?;
                 }
             }
 

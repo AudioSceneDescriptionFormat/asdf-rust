@@ -152,7 +152,7 @@ impl Scene {
             if begin <= frame && frame < end {
                 let result = transformer.get_transform(frame - begin);
                 let id = transformer.id();
-                // TODO: Establish recursion limit! There might be circular dependencies!
+                // NB: Recursive call. Cyclic dependencies have been ruled out on scene init
                 let t = self.get_transform_applying_to(id, frame);
                 if let Some(mut result) = result {
                     result.apply(t);
@@ -167,8 +167,8 @@ impl Scene {
 
     fn get_transform_applying_to(&self, id: Option<&String>, frame: u64) -> Option<Transform> {
         let transformers = self.transformer_map.get(id?)?;
-        // TODO: Establish recursion limit! There might be circular dependencies!
         transformers.iter().fold(None, |transform, &idx| {
+            // NB: Recursive call. Cyclic dependencies have been ruled out on scene init
             Transform::merge(transform, self.get_transform_from(idx, frame))
         })
     }

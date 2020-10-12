@@ -100,6 +100,8 @@ pub enum IntegrityError {
     NonExistingId(String),
     #[error("Multiple rotations applying to ID {:?}", .0)]
     MultipleRotations(String),
+    #[error("\"apply-to\" cycle involving ID {:?}", .0)]
+    CyclicDependency(String),
 }
 
 #[derive(thiserror::Error, Debug)]
