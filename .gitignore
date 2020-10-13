@@ -1,3 +1,7 @@
 /target
 **/*.rs.bk
 Cargo.lock
+/pure-data/asdf~.o
+/pure-data/asdf~.pd_linux
+/pure-data/asdf~.pd_darwin
+/pure-data/asdf~.dll

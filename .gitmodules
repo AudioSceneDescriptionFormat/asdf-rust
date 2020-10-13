@@ -4,3 +4,6 @@
 [submodule "tests/asdf"]
 	path = tests/asdf
 	url = https://github.com/AudioSceneDescriptionFormat/asdf.git
+[submodule "pure-data/pd-lib-builder"]
+	path = pure-data/pd-lib-builder
+	url = https://github.com/pure-data/pd-lib-builder.git
