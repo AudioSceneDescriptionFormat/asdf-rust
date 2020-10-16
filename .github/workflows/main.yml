@@ -17,7 +17,8 @@ jobs:
         - os: ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v2
+    - name: Clone Git repository
+      uses: actions/checkout@v2
       with:
         submodules: true
     - name: Install Rust
@@ -36,7 +37,7 @@ jobs:
         choco install llvm
     - name: Run tests
       run: |
-        cargo test --verbose --workspace --all-features
+        cargo test --workspace --all-features
     - name: Install cargo-c
       run: |
         cargo install cargo-c
@@ -49,6 +50,26 @@ jobs:
     - name: Build C API
       run: |
         cargo cbuild --verbose --release
+    - name: Install C API
+      if: startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'ubuntu')
+      run: |
+        cargo cinstall --verbose --release --destdir=temp
+        sudo cp -r temp/usr/local/* /usr/local/
+    - name: Install Pure Data
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        sudo apt-get install puredata-dev
+    - name: Install Pure Data
+      if: startsWith(matrix.os, 'macos')
+      run: |
+        brew cask install pd
+        PD_APP=$(ls -d /Applications/Pd-*.app)
+        echo "PDINCLUDEDIR=$PD_APP/Contents/Resources/src" >> $GITHUB_ENV
+    - name: Build Pure Data external
+      if: startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'ubuntu')
+      working-directory: pure-data
+      run: |
+        make
 
   check-code:
     runs-on: ubuntu-latest
