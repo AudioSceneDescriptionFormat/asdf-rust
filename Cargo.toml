@@ -8,7 +8,7 @@ edition = "2018"
 [dependencies]
 asdfspline = { path = "asdfspline" }
 # See https://github.com/crossbeam-rs/crossbeam/pull/338:
-crossbeam = { git = "https://github.com/stjepang/crossbeam.git", rev = "d1736eff0834302e30bda0d259c920b6d7ed0a58" }
+crossbeam = { git = "https://github.com/mgeier/crossbeam.git", rev = "b3343023f97848b81fecf6c7fb480cdca7c678d8" }
 errno = "*"
 libflac-sys = "0.1"
 hound = "*"
