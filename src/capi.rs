@@ -144,6 +144,7 @@ pub extern "C" fn asdf_scene_seek(scene: &mut Scene, frame: u64) -> bool {
 }
 
 /// Return value of `false` means un-recoverable error
+/// `data` will be filled with zeros in case of an error.
 #[no_mangle]
 pub unsafe extern "C" fn asdf_scene_get_audio_data(
     scene: &mut Scene,
@@ -152,12 +153,10 @@ pub unsafe extern "C" fn asdf_scene_get_audio_data(
 ) -> bool {
     assert!(!data.is_null());
     let data = std::slice::from_raw_parts(data, scene.file_sources() as usize);
-    let success = scene.get_audio_data(data, rolling);
-    if !success {
-        // TODO: get more error details from streamer
-        set_error_string("Unrecoverable error getting audio file data");
-    }
-    success
+    scene
+        .get_audio_data(data, rolling)
+        .map_err(|e| set_error(&e))
+        .is_ok()
 }
 
 /// The error message will be freed if another error occurs. It is the caller's

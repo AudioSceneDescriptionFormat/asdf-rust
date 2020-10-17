@@ -55,7 +55,7 @@ mod transform;
 mod capi;
 
 pub use crate::parser::error::LoadError as SceneLoadError;
-use crate::streamer::FileStreamer;
+use crate::streamer::{FileStreamer, StreamingError};
 use crate::transform::Transform;
 
 const REFERENCE_ID: &str = "reference";
@@ -110,13 +110,17 @@ impl Scene {
         self.streamer.seek(frame)
     }
 
-    /// Return value of `false` means un-recoverable error
+    /// Any error should be considered un-recoverable.
+    /// `target` will be filled with zeros in case of an error.
     ///
     /// # Safety
     ///
     /// `target` must be pointing to a writable memory area of sufficient size.
-    #[must_use]
-    pub unsafe fn get_audio_data(&mut self, target: &[*mut f32], rolling: bool) -> bool {
+    pub unsafe fn get_audio_data(
+        &mut self,
+        target: &[*mut f32],
+        rolling: bool,
+    ) -> Result<(), StreamingError> {
         self.streamer.get_data(target, rolling)
     }
 

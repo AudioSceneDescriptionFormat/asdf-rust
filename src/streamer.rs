@@ -10,6 +10,7 @@ use crossbeam::queue;
 use crate::audiofile::BoxedError;
 use crate::parser::{FileStorage, PlaylistEntry};
 
+#[derive(Debug)]
 enum Fade {
     In,
     Out,
@@ -109,38 +110,42 @@ impl DataConsumer {
         }
     }
 
-    /// Return value of `false` means un-recoverable error (but output buffer is still filled)
-    #[must_use]
-    unsafe fn write_channel_ptrs(&mut self, target: &[*mut f32], fade: Fade) -> bool {
-        if let Ok(block) = self.data_consumer.pop() {
-            for (source, &target) in block.channels.iter().zip(target) {
-                match fade {
-                    Fade::In => {
-                        for i in 0..self.blocksize {
-                            *target.add(i as usize) =
-                                source[i as usize] * (i + 1) as f32 / self.blocksize as f32;
-                        }
-                    }
-                    Fade::Out => {
-                        for i in 0..self.blocksize {
-                            *target.add(i as usize) = source[i as usize]
-                                * (self.blocksize - i) as f32
-                                / self.blocksize as f32;
-                        }
-                    }
-                    Fade::None => {
-                        let target =
-                            std::slice::from_raw_parts_mut(target, self.blocksize as usize);
-                        target.copy_from_slice(source);
+    /// Any error should be considered un-recoverable.
+    /// `target` will be filled with zeros in case of an error.
+    unsafe fn write_channel_ptrs(
+        &mut self,
+        target: &[*mut f32],
+        fade: Fade,
+    ) -> Result<(), StreamingError> {
+        let block = self.data_consumer.pop().map_err(|_| {
+            fill_with_zeros(target, self.blocksize);
+
+            // TODO: join thread, get better error?
+
+            StreamingError::EmptyBuffer
+        })?;
+        for (source, &target) in block.channels.iter().zip(target) {
+            match fade {
+                Fade::In => {
+                    for i in 0..self.blocksize {
+                        *target.add(i as usize) =
+                            source[i as usize] * (i + 1) as f32 / self.blocksize as f32;
                     }
                 }
+                Fade::Out => {
+                    for i in 0..self.blocksize {
+                        *target.add(i as usize) = source[i as usize] * (self.blocksize - i) as f32
+                            / self.blocksize as f32;
+                    }
+                }
+                Fade::None => {
+                    let target = std::slice::from_raw_parts_mut(target, self.blocksize as usize);
+                    target.copy_from_slice(source);
+                }
             }
-            self.recycling_producer.push(block).unwrap();
-            true
-        } else {
-            fill_with_zeros(target, self.blocksize);
-            false
         }
+        self.recycling_producer.push(block).unwrap();
+        Ok(())
     }
 }
 
@@ -259,16 +264,16 @@ impl FileStreamer {
         self.channels
     }
 
-    // TODO: more information on error, use Result?
-    /// Return value of `false` means un-recoverable error
-    #[must_use]
-    pub unsafe fn get_data(&mut self, target: &[*mut f32], rolling: bool) -> bool {
-        // TODO: Check if disk thread is still running? return false if not?
-
+    /// Any error should be considered un-recoverable.
+    /// `target` will be filled with zeros in case of an error.
+    pub unsafe fn get_data(
+        &mut self,
+        target: &[*mut f32],
+        rolling: bool,
+    ) -> Result<(), StreamingError> {
         let previously = self.previously_rolling;
-        let result = if !rolling && !previously {
+        if !rolling && !previously {
             fill_with_zeros(target, self.blocksize);
-            true
         } else if let Some(ref mut queue) = self.data_consumer {
             let fade = if rolling && !previously {
                 Fade::In
@@ -277,27 +282,24 @@ impl FileStreamer {
             } else {
                 Fade::None
             };
-            queue.write_channel_ptrs(target, fade)
+            queue.write_channel_ptrs(target, fade)?;
         } else {
             fill_with_zeros(target, self.blocksize);
-            false
+            return Err(StreamingError::IncompleteSeek);
         };
         // NB: This has to be updated before seeking:
         self.previously_rolling = rolling;
         if let Some(frame) = self.seek_frame.take() {
             if rolling {
-                // NB: Seeking while rolling is not supported
-                return false;
+                return Err(StreamingError::SeekWhileRolling);
             }
             let _ = self.seek(frame);
         }
-        result
+        Ok(())
     }
 
     #[must_use]
     pub fn seek(&mut self, frame: u64) -> bool {
-        // TODO: Check if disk thread is still running? What if not?
-
         if self.previously_rolling {
             self.seek_frame = Some(frame);
             // Don't seek yet; get_data() fades out and calls seek afterwards
@@ -334,4 +336,14 @@ unsafe fn fill_with_zeros(target: &[*mut f32], blocksize: u32) {
             *ptr.add(f as usize) = 0.0f32;
         }
     }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum StreamingError {
+    #[error("Empty file-streaming buffer")]
+    EmptyBuffer,
+    #[error("Bug: The seek function must be called until it returns true")]
+    IncompleteSeek,
+    #[error("Bug: Seeking while rolling is not supported (yet?)")]
+    SeekWhileRolling,
 }
