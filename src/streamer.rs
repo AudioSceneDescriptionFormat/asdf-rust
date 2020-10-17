@@ -125,6 +125,7 @@ impl DataConsumer {
             StreamingError::EmptyBuffer
         })?;
         for (source, &target) in block.channels.iter().zip(target) {
+            assert!(!target.is_null());
             match fade {
                 Fade::In => {
                     for i in 0..self.blocksize {
@@ -332,6 +333,7 @@ impl Drop for FileStreamer {
 
 unsafe fn fill_with_zeros(target: &[*mut f32], blocksize: u32) {
     for ptr in target {
+        assert!(!ptr.is_null());
         for f in 0..blocksize {
             *ptr.add(f as usize) = 0.0f32;
         }
