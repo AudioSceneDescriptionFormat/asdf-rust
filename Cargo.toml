@@ -5,6 +5,9 @@ authors = ["Matthias Geier <Matthias.Geier@gmail.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
 
+[package.metadata.capi.header]
+subdirectory = false
+
 [dependencies]
 asdfspline = { path = "asdfspline" }
 # See https://github.com/crossbeam-rs/crossbeam/pull/338:
@@ -13,7 +16,7 @@ errno = "*"
 libflac-sys = "0.1"
 hound = "*"
 lazy_static = "1.3.0"
-libc = "*"
+libc = "0.2"
 libsamplerate-sys = "*"
 minimp3_ex-sys = { version = "0.1", features = ["float-output"] }
 nalgebra = "0.21"
