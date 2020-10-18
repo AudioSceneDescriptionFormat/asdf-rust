@@ -38,6 +38,10 @@ impl From<Option<Transform>> for AsdfTransform {
     }
 }
 
+/// Static information about a source.
+///
+/// Use asdf_scene_get_source_transform() to get dynamic information
+/// about a source at a given frame.
 #[repr(C)]
 pub struct AsdfSource {
     id: *const c_char,
@@ -76,6 +80,15 @@ impl Scene {
     }
 }
 
+/// Load an ASDF scene from a file.
+///
+/// Before starting playback (i.e. calling asdf_scene_get_audio_data()
+/// with `rolling` set to `true`), asdf_scene_seek() has to be called.
+///
+/// The returned object must be discarded with asdf_scene_free().
+///
+/// In case of an error, NULL is returned and
+/// asdf_scene_last_error() can be used to get an error description.
 #[no_mangle]
 pub unsafe extern "C" fn asdf_scene_new(
     filename: *const c_char,
@@ -106,45 +119,86 @@ pub unsafe extern "C" fn asdf_scene_new(
     }
 }
 
+/// Discard a scene object created with asdf_scene_new().
+///
+/// Passing NULL is allowed.
 #[no_mangle]
 pub extern "C" fn asdf_scene_free(_: Option<Box<Scene>>) {}
 
+/// Get number of file sources.
 #[no_mangle]
 pub extern "C" fn asdf_scene_file_sources(scene: &Scene) -> u32 {
     scene.file_sources()
 }
 
+/// Get an AsdfSource object for a given (0-based) source index.
+///
+/// Calling this function with an invalid source index invokes undefined behavior.
+///
+/// The returned object must be discarded with asdf_source_free().
 #[no_mangle]
-pub extern "C" fn asdf_scene_get_source(scene: &Scene, index: usize) -> Box<AsdfSource> {
-    Box::new(scene.get_source(index))
+pub extern "C" fn asdf_scene_get_source(scene: &Scene, source_index: usize) -> Box<AsdfSource> {
+    Box::new(scene.get_source(source_index))
 }
 
+/// Discard a source object created with asdf_scene_get_source().
 #[no_mangle]
 pub extern "C" fn asdf_source_free(_: Option<Box<AsdfSource>>) {}
 
+/// Get AsdfTransform for a given (0-based) source index at a given frame.
+///
+/// Calling this function with an invalid source index invokes undefined behavior.
+///
+/// This function is realtime-safe.
 #[no_mangle]
 pub extern "C" fn asdf_scene_get_source_transform(
     scene: &Scene,
-    source_idx: usize,
+    source_index: usize,
     frame: u64,
 ) -> AsdfTransform {
-    scene.get_source_transform(source_idx, frame).into()
+    scene.get_source_transform(source_index, frame).into()
 }
 
-/// Reference transform is always "active".
+/// Get AsdfTransform for the reference at a given frame.
+///
+/// The reference transform is always "active".
+///
+/// This function is realtime-safe.
 #[no_mangle]
 pub extern "C" fn asdf_scene_get_reference_transform(scene: &Scene, frame: u64) -> AsdfTransform {
     scene.get_reference_transform(frame).into()
 }
 
-// TODO: possibility to report errors?
+/// Seek to the given frame.
+///
+/// Returns `true` when seeking has completed.  If `false` is returned,
+/// the function has to be called again at a later time
+/// until `true` is returned.
+///
+/// While seeking, it is not allowed to call asdf_scene_get_audio_data()
+/// with the `rolling` argument set to `true`.
+///
+/// A return value of `false` doesn't mean an error occured,
+/// therefore asdf_scene_last_error() will not contain relevant information.
+///
+/// This function is realtime-safe.
 #[no_mangle]
 pub extern "C" fn asdf_scene_seek(scene: &mut Scene, frame: u64) -> bool {
     scene.seek(frame)
 }
 
-/// Return value of `false` means un-recoverable error
-/// `data` will be filled with zeros in case of an error.
+/// Get a block of audio data.
+///
+/// If `rolling` is `false`, `data` will be filled with zeros.
+/// Before being able to call this function with `rolling` set to `true`,
+/// asdf_scene_seek() has to be called.
+///
+/// A return value of `false` means un-recoverable error,
+/// don't try calling again.
+/// In case of an error, `data` will be filled with zeros
+/// and asdf_scene_last_error() will contain an error description.
+///
+/// This function is realtime-safe.
 #[no_mangle]
 pub unsafe extern "C" fn asdf_scene_get_audio_data(
     scene: &mut Scene,
@@ -159,9 +213,14 @@ pub unsafe extern "C" fn asdf_scene_get_audio_data(
         .is_ok()
 }
 
+/// Obtain the error message of the last error.
+///
 /// The error message will be freed if another error occurs. It is the caller's
 /// responsibility to make sure they're no longer using the string before
 /// calling any other function which may fail.
+///
+/// The error message is thread-local, i.e. it can only be obtained
+/// from the thread on which the error occured.
 #[no_mangle]
 pub extern "C" fn asdf_scene_last_error() -> *const c_char {
     LAST_ERROR.with(|cell| cell.borrow().as_ptr())

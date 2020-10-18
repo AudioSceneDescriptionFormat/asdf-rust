@@ -62,6 +62,7 @@ const REFERENCE_ID: &str = "reference";
 
 type TransformerStorage = Box<[(Box<dyn Transformer>, Box<[(u64, u64)]>)]>;
 
+/// An audio scene loaded from an ASDF file.
 pub struct Scene {
     sources: Vec<Source>,
     streamer: FileStreamer,
