@@ -111,18 +111,18 @@ void asdf_tilde_open(t_asdf_tilde *x, t_symbol *s)
       usleeptime
   );
   if (!x->scene) {
-    pd_error(&x->x_obj, "asdf~: %s", asdf_scene_last_error());
+    pd_error(&x->x_obj, "asdf~: %s", asdf_last_error());
     return;
   }
 
   /* See asdf_tilde_seek() */
-  if (!asdf_scene_seek(x->scene, 0)) {
+  if (!asdf_seek(x->scene, 0)) {
     x->seeking = true;
   }
 
-  x->file_sources = asdf_scene_file_sources(x->scene);
+  x->file_sources = asdf_file_sources(x->scene);
   /*
-  x->live_sources = asdf_scene_live_sources(x->scene);
+  x->live_sources = asdf_live_sources(x->scene);
   */
 
   post("asdf~: opened scene with %u file source(s)", x->file_sources);
@@ -144,7 +144,7 @@ void asdf_tilde_open(t_asdf_tilde *x, t_symbol *s)
 
   /* TODO: send number of sources to outlet */
   /* TODO: send id/name/model of sources to outlet */
-  /*       asdf_scene_get_source()/asdf_source_free() */
+  /*       asdf_get_sourceinfo()/asdf_sourceinfo_free() */
 }
 
 /* f: 1 for play, 0 for pause */
@@ -180,7 +180,7 @@ void asdf_tilde_seek(t_asdf_tilde *x, t_floatarg f)
     return;
   }
   x->frame = seek_seconds * sys_getsr();
-  if (!asdf_scene_seek(x->scene, x->frame)) {
+  if (!asdf_seek(x->scene, x->frame)) {
     x->seeking = true;
     /* NB: seeking will be continued in the DSP function */
   }
@@ -250,13 +250,13 @@ void asdf_tilde_bang(t_asdf_tilde *x)
   /* TODO: option for getting values whether or not they have changed? */
 
   for (size_t idx = 0; idx < x->file_sources + x->live_sources; idx++) {
-    current = asdf_scene_get_source_transform(x->scene, idx, x->frame);
+    current = asdf_get_source_transform(x->scene, idx, x->frame);
 
     /* NB: one-based source numbers per SSR convention */
     AsdfTransform *previous = &x->transforms[idx + 1];
     send_transform(idx + 1, &current, previous, x->x_obj.ob_outlet, argv);
   }
-  current = asdf_scene_get_reference_transform(x->scene, x->frame);
+  current = asdf_get_reference_transform(x->scene, x->frame);
   /* NB: source number 0 means reference */
   AsdfTransform *previous = &x->transforms[0];
   send_transform(0, &current, previous, x->x_obj.ob_outlet, argv);
@@ -273,14 +273,14 @@ t_int *asdf_tilde_perform(t_int *w)
   if (x->scene) {
     bool rolling = x->rolling;
     if (x->seeking) {
-      if (asdf_scene_seek(x->scene, x->frame)) {
+      if (asdf_seek(x->scene, x->frame)) {
         x->seeking = false;
       } else {
         /* NB: seeking is not possible while rolling */
         rolling = false;
       }
     }
-    if (asdf_scene_get_audio_data(x->scene, x->audio_ptrs, rolling)) {
+    if (asdf_get_audio_data(x->scene, x->audio_ptrs, rolling)) {
       uint32_t copy_sources = x->file_sources;
       if (x->signal_outlets < x->file_sources) {
         copy_sources = x->signal_outlets;
@@ -297,7 +297,7 @@ t_int *asdf_tilde_perform(t_int *w)
         x->frame += blocksize;
       }
     } else {
-      pd_error(&x->x_obj, "asdf~: %s", asdf_scene_last_error());
+      pd_error(&x->x_obj, "asdf~: %s", asdf_last_error());
     }
   }
   /* fill remaining outlets with zeros */
