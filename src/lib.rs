@@ -71,6 +71,9 @@ pub struct Scene {
     /// Map from ID to list of transformers directly applying to this ID
     transformer_map: HashMap<String, Box<[usize]>>,
     reference_transform: Transform,
+    /// One port for each live source
+    ports: Vec<String>,
+    frames: Option<u64>,
 }
 
 impl Scene {
@@ -91,20 +94,36 @@ impl Scene {
         )
     }
 
+    pub fn frames(&self) -> Option<u64> {
+        self.frames
+    }
+
     pub fn file_sources(&self) -> u32 {
         self.streamer.channels()
     }
 
-    pub fn get_source_id(&self, index: usize) -> Option<&String> {
-        self.sources[index].id.as_ref()
+    pub fn live_sources(&self) -> u32 {
+        self.sources.len() as u32 - self.file_sources()
     }
 
-    pub fn get_source_name(&self, index: usize) -> Option<&String> {
-        self.sources[index].name.as_ref()
+    pub fn get_source_id(&self, index: u32) -> Option<&String> {
+        self.sources[index as usize].id.as_ref()
     }
 
-    pub fn get_source_model(&self, index: usize) -> Option<&String> {
-        self.sources[index].model.as_ref()
+    pub fn get_source_name(&self, index: u32) -> Option<&String> {
+        self.sources[index as usize].name.as_ref()
+    }
+
+    pub fn get_source_model(&self, index: u32) -> Option<&String> {
+        self.sources[index as usize].model.as_ref()
+    }
+
+    pub fn get_source_port(&self, index: u32) -> Option<&String> {
+        if index >= self.file_sources() {
+            Some(&self.ports[(index - self.file_sources()) as usize])
+        } else {
+            None
+        }
     }
 
     pub fn seek(&mut self, frame: u64) -> bool {
@@ -127,9 +146,9 @@ impl Scene {
 
     /// `source_idx`: Zero-based source number
     /// Panics if `source_idx` is out of range.
-    pub fn get_source_transform(&self, source_idx: usize, frame: u64) -> Option<Transform> {
+    pub fn get_source_transform(&self, source_idx: u32, frame: u64) -> Option<Transform> {
         // NB: This function is supposed to be realtime-safe!
-        let source = &self.sources[source_idx];
+        let source = &self.sources[source_idx as usize];
         let t = self.get_transform_applying_to(source.id.as_ref(), frame);
         if let Some(mut transform) = source.transform.clone() {
             transform.apply(t);
@@ -193,5 +212,4 @@ struct Source {
     model: Option<String>,
     /// Transform given in <head> element
     transform: Option<Transform>,
-    // TODO: live or file source?
 }

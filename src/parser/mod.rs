@@ -32,7 +32,10 @@ pub struct SceneInitializer {
     buffer_blocks: u32,
     sleeptime: Duration,
     all_ids: HashSet<String>,
-    sources: Vec<Source>,
+    file_sources: Vec<Source>,
+    live_sources: Vec<Source>,
+    /// Same length as `live_sources`
+    ports: Vec<String>,
     current_id_suffix: u32,
     file_storage: FileStorage,
     transformer_storage: Vec<Box<dyn Transformer>>,
@@ -40,6 +43,7 @@ pub struct SceneInitializer {
     transformer_map: HashMap<String, Vec<usize>>,
     streamer: Option<FileStreamer>,
     reference_transform: Transform,
+    frames: Option<u64>,
 }
 
 impl SceneInitializer {
@@ -320,8 +324,11 @@ impl std::convert::TryFrom<SceneInitializer> for Scene {
 
         // TODO: assert that transformer activities are sorted (they should be!?!)
 
+        let mut sources = scene.file_sources;
+        let mut more_sources = scene.live_sources;
+        sources.append(&mut more_sources);
         let scene = Scene {
-            sources: scene.sources,
+            sources,
             streamer: scene.streamer.unwrap(),
             transformers: scene
                 .transformer_storage
@@ -335,6 +342,8 @@ impl std::convert::TryFrom<SceneInitializer> for Scene {
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
             reference_transform: scene.reference_transform,
+            ports: scene.ports,
+            frames: scene.frames,
         };
         for source in &scene.sources {
             if let Some(id) = &source.id {
@@ -443,24 +452,35 @@ impl SceneInitializer {
         })
     }
 
-    fn get_source_id(
+    fn get_file_source_id(
         &mut self,
         attributes: &mut Attributes<'_>,
     ) -> Result<Option<String>, ParseError> {
         if let Some(value) = attributes.get_value("source") {
-            let id = value.to_string();
+            let id = value.as_str().trim().to_string();
             if self
-                .sources
+                .file_sources
                 .iter()
                 .filter_map(|src| src.id.as_ref())
                 .any(|s| *s == id)
             {
                 return Ok(Some(id));
             }
+            if self
+                .live_sources
+                .iter()
+                .filter_map(|src| src.id.as_ref())
+                .any(|x| *x == id)
+            {
+                parse_error!(
+                    value,
+                    "cannot use source {:?} because it has a \"port\" attribute",
+                    id
+                );
+            }
             let id = self.parse_id(value)?;
-            self.sources.push(Source {
+            self.file_sources.push(Source {
                 id: Some(id.clone()),
-                // TODO: live or file source?
                 ..Default::default()
             });
             Ok(Some(id))

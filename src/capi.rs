@@ -47,19 +47,21 @@ pub struct AsdfSourceInfo {
     id: *const c_char,
     name: *const c_char,
     model: *const c_char,
+    port: *const c_char,
 }
 
 impl AsdfSourceInfo {
-    fn new(source: &Source) -> AsdfSourceInfo {
-        fn char_ptr(s: &Option<String>) -> *const c_char {
-            CString::new(s.as_ref().map(String::as_ref).unwrap_or(""))
+    fn new(source: &Source, port: Option<&String>) -> AsdfSourceInfo {
+        fn char_ptr(s: Option<&String>) -> *const c_char {
+            CString::new(s.map(String::as_ref).unwrap_or(""))
                 .unwrap()
                 .into_raw()
         }
         AsdfSourceInfo {
-            id: char_ptr(&source.id),
-            name: char_ptr(&source.name),
-            model: char_ptr(&source.model),
+            id: char_ptr(source.id.as_ref()),
+            name: char_ptr(source.name.as_ref()),
+            model: char_ptr(source.model.as_ref()),
+            port: char_ptr(port),
         }
     }
 }
@@ -75,8 +77,8 @@ impl Drop for AsdfSourceInfo {
 }
 
 impl Scene {
-    pub fn get_source(&self, index: usize) -> AsdfSourceInfo {
-        AsdfSourceInfo::new(&self.sources[index])
+    pub fn get_source(&self, index: u32) -> AsdfSourceInfo {
+        AsdfSourceInfo::new(&self.sources[index as usize], self.get_source_port(index))
     }
 }
 
@@ -131,13 +133,27 @@ pub extern "C" fn asdf_file_sources(scene: &Scene) -> u32 {
     scene.file_sources()
 }
 
+/// Get number of live sources.
+#[no_mangle]
+pub extern "C" fn asdf_live_sources(scene: &Scene) -> u32 {
+    scene.live_sources()
+}
+
+/// Get scene duration in frames.
+///
+/// Returns `0` if the duration is undefined.
+#[no_mangle]
+pub extern "C" fn asdf_frames(scene: &Scene) -> u64 {
+    scene.frames().unwrap_or(0)
+}
+
 /// Get an AsdfSourceInfo object for a given (0-based) source index.
 ///
 /// Calling this function with an invalid source index invokes undefined behavior.
 ///
 /// The returned object must be discarded with asdf_sourceinfo_free().
 #[no_mangle]
-pub extern "C" fn asdf_get_sourceinfo(scene: &Scene, source_index: usize) -> Box<AsdfSourceInfo> {
+pub extern "C" fn asdf_get_sourceinfo(scene: &Scene, source_index: u32) -> Box<AsdfSourceInfo> {
     Box::new(scene.get_source(source_index))
 }
 
@@ -153,7 +169,7 @@ pub extern "C" fn asdf_sourceinfo_free(_: Option<Box<AsdfSourceInfo>>) {}
 #[no_mangle]
 pub extern "C" fn asdf_get_source_transform(
     scene: &Scene,
-    source_index: usize,
+    source_index: u32,
     frame: u64,
 ) -> AsdfTransform {
     scene.get_source_transform(source_index, frame).into()

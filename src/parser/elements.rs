@@ -172,10 +172,18 @@ impl<'a> Element<'a> for AsdfElement {
             self.seq.files,
             scene.file_storage.split_off(0),
             scene.blocksize,
-            scene.sources.len() as u32,
+            scene.file_sources.len() as u32,
             scene.buffer_blocks,
             scene.sleeptime,
         ));
+        scene.frames = {
+            let infinite = scene.live_sources.iter().any(|s| s.transform.is_some());
+            if infinite {
+                None
+            } else {
+                Some(self.seq.end)
+            }
+        };
         Ok(())
     }
 }
@@ -250,13 +258,20 @@ impl<'a> Element<'a> for SourceElement {
         // TODO: source without ID is only allowed for live sources!
         let name = attributes.get_value("name").map(|v| v.to_string());
         let model = attributes.get_value("model").map(|v| v.to_string());
+        let port = attributes.get_value("port").map(|v| v.to_string());
         let transform = parse_transform(attributes)?;
-        scene.sources.push(Source {
+        let source = Source {
             id,
             name,
             model,
             transform,
-        });
+        };
+        if let Some(port) = port {
+            scene.ports.push(port);
+            scene.live_sources.push(source);
+        } else {
+            scene.file_sources.push(source);
+        }
         Ok(())
     }
 
@@ -583,7 +598,7 @@ impl<'a> Element<'a> for ClipElement {
         scene: &mut SceneInitializer,
     ) -> Result<(), ParseError> {
         self.clip_id = scene.get_id(attributes)?;
-        self.source_id = scene.get_source_id(attributes)?;
+        self.source_id = scene.get_file_source_id(attributes)?;
 
         // TODO: check source_id (if non-empty) for source properties
         // TODO: depending on this, the rest may be treated differently
@@ -688,15 +703,15 @@ impl<'a> Element<'a> for ClipElement {
                 let source_number = if let Some(source_id) = channel.source_id {
                     // Source must already exist
                     scene
-                        .sources
+                        .file_sources
                         .iter()
                         .filter_map(|s| s.id.as_ref())
                         .position(|id| *id == source_id)
                         .unwrap()
                 } else {
-                    scene.sources.push(Default::default());
-                    scene.sources.last_mut().unwrap().id = Some(scene.create_new_id());
-                    scene.sources.len() - 1
+                    scene.file_sources.push(Default::default());
+                    scene.file_sources.last_mut().unwrap().id = Some(scene.create_new_id());
+                    scene.file_sources.len() - 1
                 };
                 self.channel_map.push(Some(source_number));
 
@@ -716,7 +731,7 @@ impl<'a> Element<'a> for ClipElement {
                         id: Some(channel_id),
                     }) as Box<dyn Transformer>
                 };
-                let targets = vec![scene.sources[source_number].id.clone().unwrap()];
+                let targets = vec![scene.file_sources[source_number].id.clone().unwrap()];
                 let _idx =
                     scene.add_transformer(transformer, 0, duration, &targets, &mut transformers);
             }
@@ -777,7 +792,7 @@ impl<'a> Element<'a> for ChannelElement {
             }
         } else {
             self.channel_id = scene.get_id(attributes)?;
-            self.source_id = scene.get_source_id(attributes)?;
+            self.source_id = scene.get_file_source_id(attributes)?;
             assert!(self.transform.is_none());
             self.transform = parse_transform(attributes)?;
         }
