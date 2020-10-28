@@ -2,8 +2,8 @@ name: Build ASDF lib and run tests
 on: [push, pull_request]
 env:
   CARGO_TERM_COLOR: always
-  RUST_LOG: info
   RUST_BACKTRACE: 1
+  RUST_LOG: info
 jobs:
   build-and-test:
     strategy:
@@ -17,83 +17,82 @@ jobs:
         - os: ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-    - name: Clone Git repository
-      uses: actions/checkout@v2
-      with:
-        submodules: true
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable${{ matrix.toolchain-suffix }}
-        override: true
-    - name: Double-check Rust toolchain
-      run: |
-        rustup show
-    # NB: libsamplerate-sys needs LLVM (for bindgen)
-    - name: Install LLVM
-      if: startsWith(matrix.os, 'windows')
-      run: |
-        choco install llvm
-    - name: Run tests
-      run: |
-        cargo test --workspace --all-features
-    - name: Install cargo-c
-      run: |
-        cargo install cargo-c
-    - name: Set MSVC binaries path
-      if: matrix.toolchain-suffix == '-msvc'
-      run: |
-        $BinGlob = "VC\Tools\MSVC\*\bin\Hostx64\x64"
-        $BinPath = vswhere -latest -products * -find "$BinGlob" | Select-Object -Last 1
-        echo "$BinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-    - name: Build C API
-      run: |
-        cargo cbuild --verbose --release
-    - name: Install C API
-      if: startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'ubuntu')
-      run: |
-        cargo cinstall --verbose --release --destdir=temp
-        sudo cp -r temp/usr/local/* /usr/local/
-    - name: Install Pure Data
-      if: startsWith(matrix.os, 'ubuntu')
-      run: |
-        sudo apt-get install puredata-dev
-    - name: Install Pure Data
-      if: startsWith(matrix.os, 'macos')
-      run: |
-        brew cask install pd
-        PD_APP=$(ls -d /Applications/Pd-*.app)
-        echo "PDINCLUDEDIR=$PD_APP/Contents/Resources/src" >> $GITHUB_ENV
-    - name: Build Pure Data external
-      if: startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'ubuntu')
-      working-directory: pure-data
-      run: |
-        make
+      - name: Clone Git repository
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable${{ matrix.toolchain-suffix }}
+          override: true
+      # NB: libsamplerate-sys needs LLVM (for bindgen)
+      - name: Install LLVM
+        if: startsWith(matrix.os, 'windows')
+        run: |
+          choco install llvm
+      - name: Run tests
+        run: |
+          cargo test --workspace --all-features
+      - name: Install cargo-c
+        run: |
+          cargo install cargo-c
+      - name: Set MSVC binaries path
+        if: matrix.toolchain-suffix == '-msvc'
+        run: |
+          $BinGlob = "VC\Tools\MSVC\*\bin\Hostx64\x64"
+          $BinPath = vswhere -latest -products * -find "$BinGlob" | Select-Object -Last 1
+          echo "$BinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Build C API
+        run: |
+          cargo cbuild --verbose --release
+      - name: Install C API
+        if: startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'ubuntu')
+        run: |
+          cargo cinstall --verbose --release --destdir=temp
+          sudo cp -r temp/usr/local/* /usr/local/
+      - name: Install Pure Data
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get install puredata-dev
+      - name: Install Pure Data
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          brew cask install pd
+          PD_APP=$(ls -d /Applications/Pd-*.app)
+          echo "PDINCLUDEDIR=$PD_APP/Contents/Resources/src" >> $GITHUB_ENV
+      - name: Build Pure Data external
+        if: startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'ubuntu')
+        working-directory: pure-data
+        run: |
+          make
 
   check-code:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-      with:
-        submodules: true
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        components: rustfmt, clippy
-    - name: rustfmt
-      run: |
-        cargo fmt --all -- --check
-    - name: clippy
-      run: |
-        cargo clippy --all-targets --all-features -- -D warnings
-    - name: docs
-      run: |
-        cargo doc --verbose --workspace --all-features
-    - name: readme
-      run: |
-        cargo install cargo-readme
-        cargo readme -o README.md
-        test -z "$(git diff README.md)"
+      - name: Clone Git repository
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: rustfmt, clippy
+          override: true
+      - name: rustfmt
+        run: |
+          cargo fmt --all -- --check
+      - name: clippy
+        run: |
+          cargo clippy --all-targets --all-features -- -D warnings
+      - name: docs
+        run: |
+          cargo doc --verbose --workspace --all-features
+      - name: readme
+        run: |
+          cargo install cargo-readme
+          cargo readme -o README.md
+          test -z "$(git diff README.md)"
