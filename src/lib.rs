@@ -136,9 +136,9 @@ impl Scene {
     /// # Safety
     ///
     /// `target` must be pointing to a writable memory area of sufficient size.
-    pub unsafe fn get_audio_data(
+    pub fn get_audio_data(
         &mut self,
-        target: &[*mut f32],
+        target: &mut [&mut [f32]],
         rolling: bool,
     ) -> Result<(), StreamingError> {
         self.streamer.get_data(target, rolling)

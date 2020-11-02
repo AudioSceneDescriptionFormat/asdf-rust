@@ -2,6 +2,3 @@ include_guard = "ASDF_H"
 include_version = true
 language = "C"
 cpp_compat = true
-
-[export.rename]
-"Scene" = "AsdfScene"

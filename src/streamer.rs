@@ -5,161 +5,22 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use crossbeam::queue;
+use rsor::Slice;
 
 use crate::audiofile::BoxedError;
 use crate::parser::{FileStorage, PlaylistEntry};
 
-#[derive(Debug)]
-enum Fade {
-    In,
-    Out,
-    None,
-}
-
-struct Block {
-    channels: Box<[Box<[f32]>]>,
-}
-
-impl Block {
-    fn new(frames: u32, channels: u32) -> Block {
-        Block {
-            channels: (0..channels)
-                .map(|_| (0..frames).map(|_| 0.0f32).collect())
-                .collect(),
-        }
-    }
-}
-
-struct DataProducer {
-    data_producer: queue::spsc::Producer<Block>,
-    recycling_consumer: queue::spsc::Consumer<Block>,
-}
-
-struct DataConsumer {
-    blocksize: u32,
-    data_consumer: queue::spsc::Consumer<Block>,
-    recycling_producer: queue::spsc::Producer<Block>,
-}
-
-fn make_data_queue(capacity: usize, blocksize: u32, channels: u32) -> (DataProducer, DataConsumer) {
-    let (data_producer, data_consumer) = queue::spsc::new(capacity);
-    let (recycling_producer, recycling_consumer) = queue::spsc::new(capacity);
-    for _ in 0..capacity {
-        recycling_producer
-            .push(Block::new(blocksize, channels))
-            .unwrap();
-    }
-    (
-        DataProducer {
-            data_producer,
-            recycling_consumer,
-        },
-        DataConsumer {
-            blocksize,
-            data_consumer,
-            recycling_producer,
-        },
-    )
-}
-
-struct WriteBlock<'b> {
-    // NB: Option in order to be able to move Block in drop()
-    block: Option<Block>,
-    queue: &'b mut queue::spsc::Producer<Block>,
-}
-
-impl<'b> Drop for WriteBlock<'b> {
-    fn drop(&mut self) {
-        if let Some(block) = self.block.take() {
-            self.queue.push(block).unwrap();
-        }
-    }
-}
-
-impl<'b> WriteBlock<'b> {
-    fn channels(&mut self) -> &mut [Box<[f32]>] {
-        &mut self.block.as_mut().unwrap().channels
-    }
-}
-
-impl DataProducer {
-    fn write_block(&mut self) -> Option<WriteBlock<'_>> {
-        let mut block = match self.recycling_consumer.pop() {
-            Ok(block) => block,
-            _ => return None,
-        };
-
-        // TODO: avoid filling everything with zeros?
-        for channel in block.channels.iter_mut() {
-            for value in channel.iter_mut() {
-                *value = 0.0f32;
-            }
-        }
-        Some(WriteBlock {
-            block: Some(block),
-            queue: &mut self.data_producer,
-        })
-    }
-}
-
-impl DataConsumer {
-    fn clear(&mut self) {
-        while let Ok(data) = self.data_consumer.pop() {
-            self.recycling_producer.push(data).unwrap()
-        }
-    }
-
-    /// Any error should be considered un-recoverable.
-    /// `target` will be filled with zeros in case of an error.
-    unsafe fn write_channel_ptrs(
-        &mut self,
-        target: &[*mut f32],
-        fade: Fade,
-    ) -> Result<(), StreamingError> {
-        let block = self.data_consumer.pop().map_err(|_| {
-            fill_with_zeros(target, self.blocksize);
-
-            // TODO: join thread, get better error?
-
-            StreamingError::EmptyBuffer
-        })?;
-        for (source, &target) in block.channels.iter().zip(target) {
-            assert!(!target.is_null());
-            match fade {
-                Fade::In => {
-                    for i in 0..self.blocksize {
-                        *target.add(i as usize) =
-                            source[i as usize] * (i + 1) as f32 / self.blocksize as f32;
-                    }
-                }
-                Fade::Out => {
-                    for i in 0..self.blocksize {
-                        *target.add(i as usize) = source[i as usize] * (self.blocksize - i) as f32
-                            / self.blocksize as f32;
-                    }
-                }
-                Fade::None => {
-                    let target = std::slice::from_raw_parts_mut(target, self.blocksize as usize);
-                    target.copy_from_slice(source);
-                }
-            }
-        }
-        self.recycling_producer.push(block).unwrap();
-        Ok(())
-    }
-}
-
 pub struct FileStreamer {
-    ready_consumer: queue::spsc::Consumer<(u64, DataConsumer)>,
-    seek_producer: queue::spsc::Producer<(u64, DataConsumer)>,
-    data_consumer: Option<DataConsumer>,
+    ready_consumer: rtrb::Consumer<(u64, rtrb::Consumer<f32>)>,
+    seek_producer: rtrb::Producer<(u64, rtrb::Consumer<f32>)>,
+    data_consumer: Option<rtrb::Consumer<f32>>,
     reader_thread: Option<thread::JoinHandle<Result<(), BoxedError>>>,
     reader_thread_keep_reading: Arc<AtomicBool>,
     channels: u32,
     blocksize: u32,
     previously_rolling: bool,
     seek_frame: Option<u64>,
+    sos: Slice<[f32]>,
 }
 
 struct ActiveIter<'a> {
@@ -190,60 +51,71 @@ impl FileStreamer {
         buffer_blocks: u32,
         sleeptime: Duration,
     ) -> FileStreamer {
-        let (ready_producer, ready_consumer) = queue::spsc::new(1);
-        let (seek_producer, seek_consumer) = queue::spsc::new::<(u64, DataConsumer)>(1);
+        let chunksize = blocksize as usize * channels as usize;
+        let (mut ready_producer, ready_consumer) = rtrb::RingBuffer::new(1).split();
+        let (seek_producer, mut seek_consumer) =
+            rtrb::RingBuffer::<(u64, rtrb::Consumer<f32>)>::new(1).split();
         let (mut data_producer, data_consumer) =
-            make_data_queue(buffer_blocks as usize, blocksize, channels);
+            rtrb::RingBuffer::with_chunks(buffer_blocks as usize, chunksize as usize).split();
+
         let reader_thread_keep_reading = Arc::new(AtomicBool::new(true));
         let keep_reading = Arc::clone(&reader_thread_keep_reading);
         let reader_thread = thread::spawn(move || {
             let mut data_consumer = Some(data_consumer);
             let mut current_frame = 0;
             let mut seek_frame = 0;
+            let mut sos = Slice::with_capacity(channels as usize);
 
             while keep_reading.load(Ordering::Acquire) {
                 if let Ok((frame, mut queue)) = seek_consumer.pop() {
-                    queue.clear();
+                    rtrb::RingBuffer::reset(&mut data_producer, &mut queue);
                     data_consumer = Some(queue);
                     current_frame = frame;
                     seek_frame = frame;
                 }
-                let mut block = match data_producer.write_block() {
-                    Some(block) => block,
-                    None => {
-                        thread::sleep(sleeptime);
-                        continue;
-                    }
-                };
-                let mut active_files = ActiveIter {
-                    block_start: current_frame,
-                    block_end: current_frame + u64::from(blocksize),
-                    inner: playlist.iter_mut(),
-                };
-                // TODO: Is linear search too slow? How long can playlists be?
-                for entry in &mut active_files {
-                    let (file, channel_map) = &mut file_storage[entry.idx];
-                    let offset = if entry.begin < current_frame {
-                        if current_frame == seek_frame {
-                            file.seek(current_frame - entry.begin)?;
-                        }
-                        0
-                    } else {
-                        file.seek(0)?;
-                        (entry.begin - current_frame) as u32
+                if let Ok(mut chunk) = data_producer.write_chunk(chunksize) {
+                    let target = {
+                        let (first, second) = chunk.as_mut_slices();
+                        debug_assert!(second.is_empty());
+                        sos.from_iter_mut(first.chunks_mut(blocksize as usize))
                     };
-                    file.fill_channels(&channel_map, blocksize, offset, block.channels())?;
-                }
-                current_frame += u64::from(blocksize);
+                    debug_assert_eq!(target.len(), channels as usize);
 
-                // Make sure the block is queued before data_consumer is sent
-                drop(block);
+                    // NB: Slice from RingBuffer is already filled with zeros
 
-                if current_frame - seek_frame >= u64::from(buffer_blocks) * u64::from(blocksize) {
-                    if let Some(data_consumer) = data_consumer.take() {
-                        // There is only one data queue, push() will always succeed
-                        ready_producer.push((seek_frame, data_consumer)).unwrap();
+                    let mut active_files = ActiveIter {
+                        block_start: current_frame,
+                        block_end: current_frame + u64::from(blocksize),
+                        inner: playlist.iter_mut(),
+                    };
+                    // TODO: Is linear search too slow? How long can playlists be?
+                    for entry in &mut active_files {
+                        let (file, channel_map) = &mut file_storage[entry.idx];
+                        let offset = if entry.begin < current_frame {
+                            if current_frame == seek_frame {
+                                file.seek(current_frame - entry.begin)?;
+                            }
+                            0
+                        } else {
+                            file.seek(0)?;
+                            (entry.begin - current_frame) as u32
+                        };
+                        file.fill_channels(&channel_map, blocksize, offset, target)?;
                     }
+                    current_frame += u64::from(blocksize);
+
+                    // Make sure the block is queued before data_consumer is sent
+                    chunk.commit_all();
+
+                    if current_frame - seek_frame >= u64::from(buffer_blocks) * u64::from(blocksize)
+                    {
+                        if let Some(data_consumer) = data_consumer.take() {
+                            // There is only one data queue, push() will always succeed
+                            ready_producer.push((seek_frame, data_consumer)).unwrap();
+                        }
+                    }
+                } else {
+                    thread::sleep(sleeptime);
                 }
             }
             Ok(())
@@ -258,6 +130,7 @@ impl FileStreamer {
             blocksize,
             previously_rolling: false,
             seek_frame: None,
+            sos: Slice::with_capacity(channels as usize),
         }
     }
 
@@ -267,25 +140,51 @@ impl FileStreamer {
 
     /// Any error should be considered un-recoverable.
     /// `target` will be filled with zeros in case of an error.
-    pub unsafe fn get_data(
+    pub fn get_data(
         &mut self,
-        target: &[*mut f32],
+        target: &mut [&mut [f32]],
         rolling: bool,
     ) -> Result<(), StreamingError> {
         let previously = self.previously_rolling;
         if !rolling && !previously {
-            fill_with_zeros(target, self.blocksize);
+            fill_with_zeros(target);
         } else if let Some(ref mut queue) = self.data_consumer {
-            let fade = if rolling && !previously {
-                Fade::In
-            } else if !rolling && previously {
-                Fade::Out
+            let chunksize = self.blocksize as usize * self.channels as usize;
+            if let Ok(chunk) = queue.read_chunk(chunksize) {
+                let source = {
+                    let (first, second) = chunk.as_slices();
+                    debug_assert!(second.is_empty());
+                    self.sos.from_iter(first.chunks(self.blocksize as usize))
+                };
+                debug_assert_eq!(source.len(), self.channels as usize);
+                for (source, target) in source.iter().zip(target) {
+                    if rolling && !previously {
+                        // Fade In
+                        let ramp = 1..;
+                        for (r, (s, t)) in ramp.zip(source.iter().zip(target.iter_mut())) {
+                            *t = s * r as f32 / self.blocksize as f32;
+                        }
+                    } else if !rolling && previously {
+                        // Fade Out
+                        let ramp = (1..=self.blocksize).rev();
+                        for (r, (s, t)) in ramp.zip(source.iter().zip(target.iter_mut())) {
+                            *t = s * r as f32 / self.blocksize as f32;
+                        }
+                    } else {
+                        // No Fade
+                        target.copy_from_slice(source);
+                    };
+                }
+                chunk.commit_all();
             } else {
-                Fade::None
-            };
-            queue.write_channel_ptrs(target, fade)?;
+                fill_with_zeros(target);
+
+                // TODO: join thread, get better error?
+
+                return Err(StreamingError::EmptyBuffer);
+            }
         } else {
-            fill_with_zeros(target, self.blocksize);
+            fill_with_zeros(target);
             return Err(StreamingError::IncompleteSeek);
         };
         // NB: This has to be updated before seeking:
@@ -331,11 +230,12 @@ impl Drop for FileStreamer {
     }
 }
 
-unsafe fn fill_with_zeros(target: &[*mut f32], blocksize: u32) {
-    for ptr in target {
-        assert!(!ptr.is_null());
-        for f in 0..blocksize {
-            *ptr.add(f as usize) = 0.0f32;
+fn fill_with_zeros(target: &mut [&mut [f32]]) {
+    for slice in target.iter_mut() {
+        // TODO: use slice::fill() once stabilized:
+        //slice.fill(0.0f32);
+        for elem in slice.iter_mut() {
+            *elem = 0.0f32;
         }
     }
 }

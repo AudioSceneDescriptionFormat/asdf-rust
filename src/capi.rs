@@ -7,9 +7,25 @@ use std::fmt::{Display, Write};
 use std::time::Duration;
 
 use libc::c_char;
+use rsor::Slice;
 
 use crate::transform::{Quat, Transform, Vec3};
 use crate::{Scene, Source};
+
+pub struct AsdfScene {
+    inner: Scene,
+    blocksize: u32,
+    sos: Slice<[f32]>,
+}
+
+impl AsdfScene {
+    pub fn get_source(&self, index: u32) -> AsdfSourceInfo {
+        AsdfSourceInfo::new(
+            &self.inner.sources[index as usize],
+            self.inner.get_source_port(index),
+        )
+    }
+}
 
 #[repr(C)]
 #[derive(Default)]
@@ -76,12 +92,6 @@ impl Drop for AsdfSourceInfo {
     }
 }
 
-impl Scene {
-    pub fn get_source(&self, index: u32) -> AsdfSourceInfo {
-        AsdfSourceInfo::new(&self.sources[index as usize], self.get_source_port(index))
-    }
-}
-
 /// Load an ASDF scene from a file.
 ///
 /// Before starting playback (i.e. calling asdf_get_audio_data()
@@ -98,53 +108,54 @@ pub unsafe extern "C" fn asdf_scene_new(
     blocksize: u32,
     buffer_blocks: u32,
     usleeptime: u64,
-) -> Option<Box<Scene>> {
-    let filename = match CStr::from_ptr(filename).to_str() {
-        Ok(s) => s,
-        Err(e) => {
+) -> Option<Box<AsdfScene>> {
+    let filename = CStr::from_ptr(filename)
+        .to_str()
+        .map_err(|e| {
             set_error_string(format!("Invalid filename: {}", e));
-            return None;
-        }
-    };
-    match Scene::new(
+        })
+        .ok()?;
+    let inner = Scene::new(
         filename,
         samplerate,
         blocksize,
         buffer_blocks,
         Duration::from_micros(usleeptime),
-    ) {
-        Ok(scene) => Some(Box::new(scene)),
-        Err(e) => {
-            set_error(&e);
-            None
-        }
-    }
+    )
+    .map_err(|e| set_error(&e))
+    .ok()?;
+    let file_sources = inner.file_sources() as usize;
+    Some(Box::new(AsdfScene {
+        inner,
+        blocksize,
+        sos: Slice::with_capacity(file_sources),
+    }))
 }
 
 /// Discard a scene object created with asdf_scene_new().
 ///
 /// Passing NULL is allowed.
 #[no_mangle]
-pub extern "C" fn asdf_scene_free(_: Option<Box<Scene>>) {}
+pub extern "C" fn asdf_scene_free(_: Option<Box<AsdfScene>>) {}
 
 /// Get number of file sources.
 #[no_mangle]
-pub extern "C" fn asdf_file_sources(scene: &Scene) -> u32 {
-    scene.file_sources()
+pub extern "C" fn asdf_file_sources(scene: &AsdfScene) -> u32 {
+    scene.inner.file_sources()
 }
 
 /// Get number of live sources.
 #[no_mangle]
-pub extern "C" fn asdf_live_sources(scene: &Scene) -> u32 {
-    scene.live_sources()
+pub extern "C" fn asdf_live_sources(scene: &AsdfScene) -> u32 {
+    scene.inner.live_sources()
 }
 
 /// Get scene duration in frames.
 ///
 /// Returns `0` if the duration is undefined.
 #[no_mangle]
-pub extern "C" fn asdf_frames(scene: &Scene) -> u64 {
-    scene.frames().unwrap_or(0)
+pub extern "C" fn asdf_frames(scene: &AsdfScene) -> u64 {
+    scene.inner.frames().unwrap_or(0)
 }
 
 /// Get an AsdfSourceInfo object for a given (0-based) source index.
@@ -153,7 +164,7 @@ pub extern "C" fn asdf_frames(scene: &Scene) -> u64 {
 ///
 /// The returned object must be discarded with asdf_sourceinfo_free().
 #[no_mangle]
-pub extern "C" fn asdf_get_sourceinfo(scene: &Scene, source_index: u32) -> Box<AsdfSourceInfo> {
+pub extern "C" fn asdf_get_sourceinfo(scene: &AsdfScene, source_index: u32) -> Box<AsdfSourceInfo> {
     Box::new(scene.get_source(source_index))
 }
 
@@ -168,11 +179,11 @@ pub extern "C" fn asdf_sourceinfo_free(_: Option<Box<AsdfSourceInfo>>) {}
 /// This function is realtime-safe.
 #[no_mangle]
 pub extern "C" fn asdf_get_source_transform(
-    scene: &Scene,
+    scene: &AsdfScene,
     source_index: u32,
     frame: u64,
 ) -> AsdfTransform {
-    scene.get_source_transform(source_index, frame).into()
+    scene.inner.get_source_transform(source_index, frame).into()
 }
 
 /// Get AsdfTransform for the reference at a given frame.
@@ -181,8 +192,8 @@ pub extern "C" fn asdf_get_source_transform(
 ///
 /// This function is realtime-safe.
 #[no_mangle]
-pub extern "C" fn asdf_get_reference_transform(scene: &Scene, frame: u64) -> AsdfTransform {
-    scene.get_reference_transform(frame).into()
+pub extern "C" fn asdf_get_reference_transform(scene: &AsdfScene, frame: u64) -> AsdfTransform {
+    scene.inner.get_reference_transform(frame).into()
 }
 
 /// Seek to the given frame.
@@ -199,8 +210,8 @@ pub extern "C" fn asdf_get_reference_transform(scene: &Scene, frame: u64) -> Asd
 ///
 /// This function is realtime-safe.
 #[no_mangle]
-pub extern "C" fn asdf_seek(scene: &mut Scene, frame: u64) -> bool {
-    scene.seek(frame)
+pub extern "C" fn asdf_seek(scene: &mut AsdfScene, frame: u64) -> bool {
+    scene.inner.seek(frame)
 }
 
 /// Get a block of audio data.
@@ -214,16 +225,25 @@ pub extern "C" fn asdf_seek(scene: &mut Scene, frame: u64) -> bool {
 /// In case of an error, `data` will be filled with zeros
 /// and asdf_last_error() will contain an error description.
 ///
-/// This function is realtime-safe.
+/// This function is realtime-safe but not re-entrant.
 #[no_mangle]
 pub unsafe extern "C" fn asdf_get_audio_data(
-    scene: &mut Scene,
+    scene: &mut AsdfScene,
     data: *const *mut f32,
     rolling: bool,
 ) -> bool {
-    assert!(!data.is_null());
-    let data = std::slice::from_raw_parts(data, scene.file_sources() as usize);
+    let pointers = std::slice::from_raw_parts(data, scene.inner.file_sources() as usize);
+    let blocksize = scene.blocksize as usize;
+
+    // This mutably borrows `scene.sos` and is therefore not re-entrant.
+    let data = scene.sos.from_iter_mut(
+        pointers
+            .iter()
+            .map(|&ptr| std::slice::from_raw_parts_mut(ptr, blocksize)),
+    );
+    // This mutably borrows `scene.inner` and is therefore not re-entrant.
     scene
+        .inner
         .get_audio_data(data, rolling)
         .map_err(|e| set_error(&e))
         .is_ok()

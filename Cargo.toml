@@ -12,8 +12,8 @@ subdirectory = false
 
 [dependencies]
 asdfspline = { path = "asdfspline" }
-# See https://github.com/crossbeam-rs/crossbeam/pull/338:
-crossbeam = { git = "https://github.com/mgeier/crossbeam.git", rev = "b3343023f97848b81fecf6c7fb480cdca7c678d8" }
+rtrb = "0.1"
+rsor = "0.1"
 errno = "*"
 libflac-sys = "0.1"
 hound = "*"

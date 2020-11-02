@@ -13,7 +13,7 @@ pub trait AudioFile: AudioFileBasics {
         channel_map: &[Option<usize>],
         blocksize: u32,
         offset: u32,
-        channels: &mut [Box<[f32]>],
+        channels: &mut [&mut [f32]],
     ) -> Result<(), BoxedError>;
 }
 
@@ -28,7 +28,7 @@ where
         channel_map: &[Option<usize>],
         blocksize: u32,
         offset: u32,
-        channels: &mut [Box<[f32]>],
+        channels: &mut [&mut [f32]],
     ) -> Result<(), BoxedError> {
         self.fill_channels(channel_map, blocksize, offset, channels)
     }
