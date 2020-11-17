@@ -1350,6 +1350,61 @@ impl<'a> Element<'a> for TransformNodeElement {
     }
 }
 
+#[derive(Default)]
+struct WaitElement {
+    duration: Option<Seconds>,
+    parent_duration: Option<Seconds>,
+}
+
+impl WaitElement {
+    fn new(parent_duration: Option<Seconds>) -> Self {
+        Self {
+            parent_duration,
+            ..Default::default()
+        }
+    }
+}
+
+impl<'a> Element<'a> for WaitElement {
+    fn parse_attributes(
+        &mut self,
+        attributes: &mut Attributes<'_>,
+        span: xml::StrSpan<'_>,
+        _scene: &mut SceneInitializer,
+    ) -> Result<(), ParseError> {
+        // TODO: code reuse
+        if let Some(dur_value) = attributes.get_value("dur") {
+            self.duration = match parse_attribute(dur_value)? {
+                XmlTime::Seconds(s) => Some(s),
+                XmlTime::Fraction(f) => {
+                    if let Some(parent_duration) = self.parent_duration {
+                        Some(Seconds(f * parent_duration.0))
+                    } else {
+                        parse_error!(
+                            dur_value,
+                            "Could not infer parent duration to resolve percentage"
+                        );
+                    }
+                }
+            }
+        } else {
+            parse_error!(span, "\"dur\" attribute is required in <wait> element");
+        }
+        Ok(())
+    }
+
+    fn close(
+        self: Box<Self>,
+        span: xml::StrSpan<'a>,
+        parent: Option<&mut Box<dyn Element<'_>>>,
+        scene: &mut SceneInitializer,
+    ) -> Result<(), ParseError> {
+        let parent = parent.unwrap();
+        let frames = seconds2frames(self.duration.unwrap(), scene.samplerate);
+        parent.add_files_and_transformers(vec![], vec![], frames, span)
+    }
+}
+
 fn child_in_container<'a>(
     name: xml::StrSpan<'_>,
     parent_span: xml::StrSpan<'_>,
@@ -1361,6 +1416,7 @@ fn child_in_container<'a>(
         // TODO: pass parent_duration?
         "clip" => Ok(Box::new(ClipElement::new())),
         "transform" => Ok(Box::new(TransformElement::new(parent_duration))),
+        "wait" => Ok(Box::new(WaitElement::new(parent_duration))),
         _ => parse_error!(
             name,
             "No <{}> element allowed in <{}>",
