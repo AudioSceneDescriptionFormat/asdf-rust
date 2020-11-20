@@ -27,11 +27,6 @@ jobs:
           profile: minimal
           toolchain: stable${{ matrix.toolchain-suffix }}
           override: true
-      # NB: libsamplerate-sys needs LLVM (for bindgen)
-      - name: Install LLVM
-        if: startsWith(matrix.os, 'windows')
-        run: |
-          choco install llvm
       - name: Run tests
         run: |
           cargo test --workspace --all-features
