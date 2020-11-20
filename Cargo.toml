@@ -30,5 +30,5 @@ vorbisfile-sys = "*"
 xmlparser = "0.12"
 
 [patch.crates-io]
-# Temporary, until https://github.com/tomaka/vorbis-sys/pull/5 is merged:
-vorbis-sys = { git = "https://github.com/mgeier/vorbis-sys.git", rev = "ac7feb718dd1d1c8e3ed71dc12a7ba44ffd61289" }
+# Temporary, until a new vorbis-sys release is published
+vorbis-sys = { git = "https://github.com/tomaka/vorbis-sys.git" }
