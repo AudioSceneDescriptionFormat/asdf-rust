@@ -131,11 +131,10 @@ void asdf_tilde_open(t_asdf_tilde *x, t_symbol *s)
   }
 
   x->file_sources = asdf_file_sources(x->scene);
-  /*
   x->live_sources = asdf_live_sources(x->scene);
-  */
 
-  post("asdf~: opened scene with %u file source(s)", x->file_sources);
+  post("asdf~: opened scene with %u file source(s) and %u live source(s)",
+      x->file_sources, x->live_sources);
   if (x->signal_outlets < x->file_sources) {
     /* NB: this is just a warning, available outlets will receive audio data */
     pd_error(
