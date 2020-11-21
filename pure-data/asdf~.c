@@ -10,13 +10,13 @@ typedef struct _asdf_tilde {
   t_object  x_obj;  /* required, has to be the first entry */
   uint32_t blocksize;
   uint32_t signal_outlets;
-  size_t dsp_data_size;
-  t_int *dsp_data;
+  float **outlet_ptrs;
   AsdfScene *scene;
   AsdfTransform *transforms;
   uint32_t file_sources;
   uint32_t live_sources;
-  /* writable memory to be passed to asdf_get_audio_data()
+  float **file_source_ptrs;
+  /* writable memory to be used in file_source_ptrs
      if there are more file sources than outlets;
      a single (reusable) channel is enough */
   float *dummy_source_data;
@@ -24,25 +24,6 @@ typedef struct _asdf_tilde {
   bool seeking;
   uint64_t frame;
 } t_asdf_tilde;
-
-void reset_dsp_data(t_asdf_tilde *x)
-{
-  /* first pointer for t_asdf_tilde object ... */
-  uint32_t required_size = 1;
-  /* ... the following pointers for file sources ... */
-  required_size += x->file_sources;
-  /* ... and the rest for unused outlets */
-  if (x->file_sources < x->signal_outlets) {
-    required_size += x->signal_outlets - x->file_sources;
-  }
-  /* NB: dsp_data is never shrunk, only re-allocated if more space is needed */
-  if (x->dsp_data_size < required_size) {
-    freebytes(x->dsp_data, x->dsp_data_size * sizeof(t_int));
-    x->dsp_data_size = required_size;
-    x->dsp_data = getbytes(x->dsp_data_size * sizeof(t_int));
-    x->dsp_data[0] = (t_int)x;
-  }
-}
 
 /* f: maximum number of (file) sources */
 void *asdf_tilde_new(t_floatarg f)
@@ -55,7 +36,6 @@ void *asdf_tilde_new(t_floatarg f)
     return NULL;
   }
   x->blocksize = sys_getblksize();
-  reset_dsp_data(x);
 
   /* first outlet for messages */
   outlet_new(&x->x_obj, NULL);
@@ -64,11 +44,13 @@ void *asdf_tilde_new(t_floatarg f)
     /* NB: we don't bother to store the resulting outlet pointers */
     outlet_new(&x->x_obj, &s_signal);
   }
+  x->outlet_ptrs = getbytes(x->signal_outlets * sizeof(float *));
   return (void *)x;
 }
 
 void clear_scene(t_asdf_tilde *x)
 {
+  freebytes(x->file_source_ptrs, x->file_sources * sizeof(float *));
   if (x->file_sources > x->signal_outlets) {
     freebytes(x->dummy_source_data, x->blocksize * sizeof(float));
   }
@@ -90,8 +72,20 @@ void clear_scene(t_asdf_tilde *x)
 void asdf_tilde_free(t_asdf_tilde *x)
 {
   clear_scene(x);
-  freebytes(x->dsp_data, x->dsp_data_size * sizeof(t_int));
+  freebytes(x->outlet_ptrs, x->signal_outlets * sizeof(float *));
   /* NB: we don't free inlets/outlets because we hope Pd does it for us */
+}
+
+void update_buffers(t_asdf_tilde *x)
+{
+  for (uint32_t i = 0; i < x->file_sources; i++) {
+    if (i < x->signal_outlets) {
+      x->file_source_ptrs[i] = x->outlet_ptrs[i];
+    } else {
+      /* NB: A single channel is reused multiple times if necessary */
+      x->file_source_ptrs[i] = x->dummy_source_data;
+    }
+  }
 }
 
 /* s: ASDF scene file name */
@@ -151,12 +145,14 @@ void asdf_tilde_open(t_asdf_tilde *x, t_symbol *s)
         x->file_sources);
   }
 
-  reset_dsp_data(x);
   if (x->file_sources > x->signal_outlets) {
     x->dummy_source_data = getbytes(x->blocksize * sizeof(float));
   }
+  x->file_source_ptrs = getbytes(x->file_sources * sizeof(float *));
   x->transforms = getbytes(
       (1 + x->file_sources + x->live_sources) * sizeof(AsdfTransform));
+
+  update_buffers(x);
 
   /* TODO: send number of sources to outlet */
   /* TODO: send id/name/model of sources to outlet */
@@ -295,7 +291,7 @@ t_int *asdf_tilde_perform(t_int *w)
         rolling = false;
       }
     }
-    if (asdf_get_audio_data(x->scene, (t_sample **)(w + 2), rolling)) {
+    if (asdf_get_audio_data(x->scene, x->file_source_ptrs, rolling)) {
       if (rolling) {
         x->frame += blocksize;
       }
@@ -303,45 +299,33 @@ t_int *asdf_tilde_perform(t_int *w)
       pd_error(&x->x_obj, "asdf~: %s", asdf_last_error());
     }
   }
-  uint32_t i = x->file_sources;
-  /* fill remaining outlets with zeros */
-  for (; i < x->signal_outlets; i++) {
-    t_sample *target = (t_sample *)w[i + 2];
+  /* fill unused outlets with zeros */
+  for (uint32_t i = x->file_sources; i < x->signal_outlets; i++) {
+    t_sample *target = x->outlet_ptrs[i];
     for (uint32_t j = 0; j < blocksize; j++) {
       /* TODO: use memset()? */
       target[j] = 0.0;
     }
   }
-  return w + i + 2;
+  return w + 2;
 }
 
 void asdf_tilde_dsp(t_asdf_tilde *x, t_signal **sp)
 {
-  /* dsp_data[0]: pointer to the t_asdf_tilde object */
-  /* dsp_data[1..file_sources+1]: storage for audio data */
-  /* dsp_data[file_sources+1..]: unused outlets, to be filled with zeros */
-  uint32_t i = 0;
-  for (; i < x->file_sources; i++) {
-    if (i < x->signal_outlets) {
-      x->dsp_data[i + 1] = (t_int)sp[i]->s_vec;
-    } else {
-      /* NB: A single channel is reused multiple times if necessary */
-      x->dsp_data[i + 1] = (t_int)x->dummy_source_data;
-    }
-  }
-  for (; i < x->signal_outlets; i++) {
-    x->dsp_data[i + 1] = (t_int)sp[i]->s_vec;
-  }
-  if (!x->signal_outlets || x->blocksize == (uint32_t)sp[0]->s_n) {
-    dsp_addv(asdf_tilde_perform, i + 1, x->dsp_data);
-  } else {
-    /* TODO: is there a way to avoid this? */
+  if (x->signal_outlets && x->blocksize != (uint32_t)sp[0]->s_n) {
+    /* TODO: is there a way to avoid this limitation? */
     pd_error(
         &x->x_obj,
         "asdf~ must run with the system block size %u, not %i",
         x->blocksize,
         sp[0]->s_n);
+    return;
   }
+  for (uint32_t i = 0; i < x->signal_outlets; i++) {
+    x->outlet_ptrs[i] = sp[i]->s_vec;
+  }
+  update_buffers(x);
+  dsp_add(asdf_tilde_perform, 1, (t_int)x);
 }
 
 /* library setup */
