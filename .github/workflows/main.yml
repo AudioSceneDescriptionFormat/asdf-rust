@@ -86,8 +86,3 @@ jobs:
       - name: docs
         run: |
           cargo doc --verbose --workspace --all-features
-      - name: readme
-        run: |
-          cargo install cargo-readme
-          cargo readme -o README.md
-          test -z "$(git diff README.md)"
