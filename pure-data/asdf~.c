@@ -290,12 +290,21 @@ t_int *asdf_tilde_perform(t_int *w)
         rolling = false;
       }
     }
-    if (asdf_get_audio_data(x->scene, x->file_source_ptrs, rolling)) {
-      if (rolling) {
-        x->frame += blocksize;
-      }
-    } else {
-      pd_error(&x->x_obj, "asdf~: %s", asdf_last_error());
+    switch (asdf_get_audio_data(x->scene, x->file_source_ptrs, rolling)) {
+      case ASDF_STREAMING_SUCCESS:
+        if (rolling) {
+          x->frame += blocksize;
+        }
+        break;
+      case ASDF_STREAMING_EMPTY_BUFFER:
+        pd_error(&x->x_obj, "asdf~: empty file streaming buffer");
+        break;
+      case ASDF_STREAMING_INCOMPLETE_SEEK:
+        pd_error(&x->x_obj, "asdf~: BUG: incomplete seek");
+        break;
+      case ASDF_STREAMING_SEEK_WHILE_ROLLING:
+        pd_error(&x->x_obj, "asdf~: BUG: seek while rolling");
+        break;
     }
   }
   /* fill unused outlets with zeros */

@@ -95,12 +95,7 @@ impl Scene {
         self.streamer.seek(frame)
     }
 
-    /// Any error should be considered un-recoverable.
     /// `target` will be filled with zeros in case of an error.
-    ///
-    /// # Safety
-    ///
-    /// `target` must be pointing to a writable memory area of sufficient size.
     pub fn get_audio_data(
         &mut self,
         target: &mut [&mut [f32]],

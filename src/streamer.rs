@@ -10,6 +10,11 @@ use rsor::Slice;
 use crate::audiofile::BoxedError;
 use crate::parser::{FileStorage, PlaylistEntry};
 
+pub enum State {
+    Playing(u64),
+    Seeking(u64),
+}
+
 pub struct FileStreamer {
     ready_consumer: rtrb::Consumer<(u64, rtrb::Consumer<f32>)>,
     seek_producer: rtrb::Producer<(u64, rtrb::Consumer<f32>)>,
@@ -19,7 +24,7 @@ pub struct FileStreamer {
     channels: u32,
     blocksize: u32,
     previously_rolling: bool,
-    seek_frame: Option<u64>,
+    state: State,
     sos: Slice<[f32]>,
 }
 
@@ -129,7 +134,7 @@ impl FileStreamer {
             channels,
             blocksize,
             previously_rolling: false,
-            seek_frame: None,
+            state: State::Seeking(0),
             sos: Slice::with_capacity(channels as usize),
         }
     }
@@ -138,7 +143,6 @@ impl FileStreamer {
         self.channels
     }
 
-    /// Any error should be considered un-recoverable.
     /// `target` will be filled with zeros in case of an error.
     pub fn get_data(
         &mut self,
@@ -176,20 +180,19 @@ impl FileStreamer {
                     };
                 }
                 chunk.commit_all();
+                if let State::Playing(f) = self.state {
+                    self.state = State::Playing(f + self.blocksize as u64);
+                }
             } else {
                 fill_with_zeros(target);
-
-                // TODO: join thread, get better error?
-
                 return Err(StreamingError::EmptyBuffer);
             }
         } else {
             fill_with_zeros(target);
             return Err(StreamingError::IncompleteSeek);
         };
-        // NB: This has to be updated before seeking:
         self.previously_rolling = rolling;
-        if let Some(frame) = self.seek_frame.take() {
+        if let State::Seeking(frame) = self.state {
             if rolling {
                 return Err(StreamingError::SeekWhileRolling);
             }
@@ -200,8 +203,13 @@ impl FileStreamer {
 
     #[must_use]
     pub fn seek(&mut self, frame: u64) -> bool {
+        if let State::Playing(f) = self.state {
+            if f == frame {
+                return true;
+            }
+        }
+        self.state = State::Seeking(frame);
         if self.previously_rolling {
-            self.seek_frame = Some(frame);
             // Don't seek yet; get_data() fades out and calls seek afterwards
             return false;
         }
@@ -210,6 +218,7 @@ impl FileStreamer {
             if let Ok((ready_frame, queue)) = self.ready_consumer.pop() {
                 self.data_consumer = Some(queue);
                 if ready_frame == frame {
+                    self.state = State::Playing(frame);
                     return true;
                 }
             }
@@ -246,6 +255,6 @@ pub enum StreamingError {
     EmptyBuffer,
     #[error("Bug: The seek function must be called until it returns true")]
     IncompleteSeek,
-    #[error("Bug: Seeking while rolling is not supported (yet?)")]
+    #[error("Bug: Seeking while rolling is not supported")]
     SeekWhileRolling,
 }

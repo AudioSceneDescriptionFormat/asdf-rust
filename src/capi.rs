@@ -92,6 +92,28 @@ impl Drop for AsdfSourceInfo {
     }
 }
 
+#[allow(non_camel_case_types)]
+#[repr(C)]
+pub enum AsdfStreamingResult {
+    ASDF_STREAMING_SUCCESS,
+    ASDF_STREAMING_EMPTY_BUFFER,
+    ASDF_STREAMING_INCOMPLETE_SEEK,
+    ASDF_STREAMING_SEEK_WHILE_ROLLING,
+}
+
+impl From<Result<(), crate::streamer::StreamingError>> for AsdfStreamingResult {
+    fn from(result: Result<(), crate::streamer::StreamingError>) -> Self {
+        use crate::streamer::StreamingError::*;
+        use AsdfStreamingResult::*;
+        match result {
+            Ok(()) => ASDF_STREAMING_SUCCESS,
+            Err(EmptyBuffer) => ASDF_STREAMING_EMPTY_BUFFER,
+            Err(IncompleteSeek) => ASDF_STREAMING_INCOMPLETE_SEEK,
+            Err(SeekWhileRolling) => ASDF_STREAMING_SEEK_WHILE_ROLLING,
+        }
+    }
+}
+
 /// Load an ASDF scene from a file.
 ///
 /// Before starting playback (i.e. calling asdf_get_audio_data()
@@ -218,12 +240,11 @@ pub extern "C" fn asdf_seek(scene: &mut AsdfScene, frame: u64) -> bool {
 ///
 /// If `rolling` is `false`, `data` will be filled with zeros.
 /// Before being able to call this function with `rolling` set to `true`,
-/// asdf_seek() has to be called.
+/// asdf_seek() has to be called (potentially repeatedly, until it returns `true`).
 ///
-/// A return value of `false` means un-recoverable error,
-/// don't try calling again.
-/// In case of an error, `data` will be filled with zeros
-/// and asdf_last_error() will contain an error description.
+/// In case of an error, `data` will be filled with zeros.
+///
+/// `data` is only allowed to be NULL when there are no file sources.
 ///
 /// This function is realtime-safe but not re-entrant.
 #[no_mangle]
@@ -231,8 +252,15 @@ pub unsafe extern "C" fn asdf_get_audio_data(
     scene: &mut AsdfScene,
     data: *const *mut f32,
     rolling: bool,
-) -> bool {
-    let pointers = std::slice::from_raw_parts(data, scene.inner.file_sources() as usize);
+) -> AsdfStreamingResult {
+    let sources = scene.inner.file_sources() as usize;
+    // NB: C++ doesn't guarantee that std::vector::data() is non-null for an empty vector.
+    let data = if sources != 0 {
+        data
+    } else {
+        std::ptr::NonNull::dangling().as_ptr()
+    };
+    let pointers = std::slice::from_raw_parts(data, sources);
     let blocksize = scene.blocksize as usize;
 
     // This mutably borrows `scene.sos` and is therefore not re-entrant.
@@ -242,11 +270,7 @@ pub unsafe extern "C" fn asdf_get_audio_data(
             .map(|&ptr| std::slice::from_raw_parts_mut(ptr, blocksize)),
     );
     // This mutably borrows `scene.inner` and is therefore not re-entrant.
-    scene
-        .inner
-        .get_audio_data(data, rolling)
-        .map_err(|e| set_error(&e))
-        .is_ok()
+    scene.inner.get_audio_data(data, rolling).into()
 }
 
 /// Obtain the error message of the last error.
