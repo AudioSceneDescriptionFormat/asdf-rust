@@ -16,7 +16,7 @@ mod parser;
 mod streamer;
 mod transform;
 
-#[cfg(cargo_c)]
+#[cfg(feature = "capi")]
 mod capi;
 
 pub use crate::parser::error::LoadError as SceneLoadError;
