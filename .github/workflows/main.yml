@@ -50,7 +50,7 @@ jobs:
       - name: Install Pure Data
         if: startsWith(matrix.os, 'ubuntu')
         run: |
-          sudo apt-get install puredata-dev
+          sudo apt-get install --no-install-recommends puredata-dev
       - name: Install Pure Data
         if: startsWith(matrix.os, 'macos')
         run: |
