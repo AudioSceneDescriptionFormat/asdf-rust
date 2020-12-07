@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use asdfspline::{AsdfPosSpline, AsdfRotSpline, NormWrapper, Spline};
+use asdfspline::{AsdfPosSpline, AsdfRotSpline, NormWrapper, PiecewiseCubicCurve, Spline};
 use regex::Regex;
 use xmlparser as xml;
 
@@ -142,6 +142,7 @@ struct SplineTransformer {
     id: Option<String>,
     pos_spline: Option<AsdfPosSpline<Vec3, Norm3>>,
     rot_spline: Option<AsdfRotSpline>,
+    vol_spline: Option<PiecewiseCubicCurve<f32>>,
     samplerate: u32,
 }
 
@@ -155,6 +156,7 @@ impl Transformer for SplineTransformer {
         Some(Transform {
             translation: self.pos_spline.as_ref().map(|s| s.evaluate(time)),
             rotation: self.rot_spline.as_ref().map(|s| s.evaluate(time)),
+            volume: self.vol_spline.as_ref().map(|s| s.evaluate(time)),
         })
     }
 }

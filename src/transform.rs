@@ -15,8 +15,9 @@ pub struct Transform {
     // TODO: scale?
     pub rotation: Option<Quat>,
     pub translation: Option<Vec3>,
-    // NB: Some operations are order-independent: gain, ...
-    // TODO: gain, ...
+    // NB: Some operations are order-independent: vol, ...
+    pub volume: Option<f32>,
+    // TODO: more fields?
 }
 
 impl Transform {
@@ -37,7 +38,12 @@ impl Transform {
                     rotation: one.rotation.xor(two.rotation),
                     translation: one
                         .translation
-                        .map(|v| v + two.translation.unwrap_or_else(Vec3::zeros)),
+                        .map(|v| v + two.translation.unwrap_or_else(Vec3::zeros))
+                        .or(two.translation),
+                    volume: one
+                        .volume
+                        .map(|v| v * two.volume.unwrap_or(1.0))
+                        .or(two.volume),
                 }
             } else {
                 one
@@ -65,7 +71,9 @@ impl Transform {
                 *self.translation.get_or_insert_with(Vec3::zeros) += translation;
             }
 
-            // TODO: handle other members
+            if let Some(volume) = other.volume {
+                *self.volume.get_or_insert(1.0) *= volume;
+            }
         }
     }
 }
@@ -85,7 +93,10 @@ pub fn parse_transform<'a>(
             "rot" => {
                 result.get_or_insert_with(Default::default).rotation = Some(parse_rot(value)?);
             }
-            // TODO: other attributes
+            "vol" => {
+                result.get_or_insert_with(Default::default).volume = Some(parse_vol(value)?);
+            }
+            // TODO: more attributes?
             _ => out_attributes.push((name, value)),
         };
     }
@@ -147,4 +158,16 @@ pub fn parse_rot(value: xml::StrSpan<'_>) -> Result<Quat, ParseError> {
     Ok(Quat::from_axis_angle(&Vec3::z_axis(), radians(azimuth))
         * Quat::from_axis_angle(&Vec3::x_axis(), radians(elevation))
         * Quat::from_axis_angle(&Vec3::y_axis(), radians(roll)))
+}
+
+pub fn parse_vol(value: xml::StrSpan<'_>) -> Result<f32, ParseError> {
+    let vol = value
+        .as_str()
+        .trim()
+        .parse()
+        .map_err(|e| ParseError::from_source(e, "invalid volume", value))?;
+    if vol < 0.0 {
+        return Err(ParseError::new("volume cannot be negative", value));
+    }
+    Ok(vol)
 }

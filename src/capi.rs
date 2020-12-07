@@ -36,6 +36,7 @@ pub struct AsdfTransform {
     rot_v: [f32; 3],
     /// Scalar part of quaternion
     rot_s: f32,
+    vol: f32,
 }
 
 impl From<Option<Transform>> for AsdfTransform {
@@ -47,6 +48,7 @@ impl From<Option<Transform>> for AsdfTransform {
                 pos: t.translation.unwrap_or_else(Vec3::zeros).into(),
                 rot_v: rot.vector().into(),
                 rot_s: rot.scalar(),
+                vol: t.volume.unwrap_or(1.0),
             }
         } else {
             AsdfTransform::default()

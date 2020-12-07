@@ -7,6 +7,10 @@ edition = "2018"
 
 publish = false
 
+[features]
+# See https://github.com/lu-zero/cargo-c/issues/152
+capi = []
+
 [package.metadata.capi.header]
 subdirectory = false
 

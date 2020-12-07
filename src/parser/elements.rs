@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use asdfspline::Spline as _;
-use asdfspline::{AsdfPosSpline, AsdfRotSpline};
+use asdfspline::{AsdfPosSpline, AsdfRotSpline, PiecewiseCubicCurve};
 use xmlparser as xml;
 
 use crate::audiofile::dynamic::{load_audio_file, AudioFile};
 use crate::streamer::FileStreamer;
-use crate::transform::{parse_pos, parse_rot, parse_transform, Transform, Vec3};
+use crate::transform::{parse_pos, parse_rot, parse_transform, parse_vol, Transform, Vec3};
 use crate::{Source, Transformer, REFERENCE_ID};
 
 use super::error::ParseError;
@@ -1010,14 +1010,19 @@ impl<'a> Element<'a> for TransformElement {
 
             let mut positions = Vec::<Vec3>::new();
             let mut rotations = Vec::new();
+            let mut volumes = Vec::new();
             let mut times_pos = Vec::<Option<f32>>::new();
             let mut times_rot = Vec::<Option<f32>>::new();
+            let mut times_vol = Vec::<Option<f32>>::new();
             let mut rot_time_from_pos = Vec::new();
+            let mut vol_time_from_pos = Vec::new();
+            let mut vol_time_from_rot = Vec::new();
             let mut speeds = Vec::<Option<f32>>::new();
             let mut tcb_pos = Vec::<[f32; 3]>::new();
             let mut tcb_rot = Vec::<[f32; 3]>::new();
             let mut closed_pos = false;
             let mut closed_rot = false;
+            let mut closed_vol = false;
 
             for node in &self.nodes {
                 let time = node.time.map(|t| t.resolve(transform_duration).0);
@@ -1029,11 +1034,17 @@ impl<'a> Element<'a> for TransformElement {
                     assert!(node.bias.is_none());
                 }
 
-                if time.is_none()
-                    && node.transform.translation.is_some()
-                    && node.transform.rotation.is_some()
-                {
-                    rot_time_from_pos.push((times_rot.len(), times_pos.len()));
+                if time.is_none() {
+                    if node.transform.translation.is_some() {
+                        if node.transform.rotation.is_some() {
+                            rot_time_from_pos.push((times_rot.len(), times_pos.len()));
+                        }
+                        if node.transform.volume.is_some() {
+                            vol_time_from_pos.push((times_vol.len(), times_pos.len()));
+                        }
+                    } else if node.transform.rotation.is_some() && node.transform.volume.is_some() {
+                        vol_time_from_rot.push((times_vol.len(), times_rot.len()));
+                    }
                 }
 
                 let tcb = [
@@ -1047,6 +1058,7 @@ impl<'a> Element<'a> for TransformElement {
                     assert!(node.speed.is_none());
                     assert!(!closed_pos);
                     assert!(!closed_rot);
+                    assert!(!closed_vol);
                     closed_pos = true;
                     times_pos.push(time);
                 } else if let Some(position) = node.transform.translation {
@@ -1060,6 +1072,7 @@ impl<'a> Element<'a> for TransformElement {
 
                 if node.closed_rot {
                     assert!(!closed_rot);
+                    assert!(!closed_vol);
                     if !node.closed_pos {
                         assert!(!closed_pos);
                     }
@@ -1071,7 +1084,22 @@ impl<'a> Element<'a> for TransformElement {
                     tcb_rot.push(tcb);
                 }
 
-                // TODO: handle volume, ...
+                if node.closed_vol {
+                    assert!(!closed_vol);
+                    if !node.closed_pos {
+                        assert!(!closed_pos);
+                    }
+                    if !node.closed_rot {
+                        assert!(!closed_rot);
+                    }
+                    closed_vol = true;
+                    times_vol.push(time);
+                } else if let Some(volume) = node.transform.volume {
+                    times_vol.push(time);
+                    volumes.push(volume);
+                }
+
+                // TODO: handle more fields?
             }
 
             if let Some(first_time) = self.nodes.first().unwrap().time {
@@ -1097,6 +1125,9 @@ impl<'a> Element<'a> for TransformElement {
                 if let [first, ..] = &mut times_rot[..] {
                     *first = Some(0.0);
                 }
+                if let [first, ..] = &mut times_vol[..] {
+                    *first = Some(0.0);
+                }
             }
             if let [.., last] = &mut times_pos[..] {
                 if last.is_none() {
@@ -1104,6 +1135,11 @@ impl<'a> Element<'a> for TransformElement {
                 }
             }
             if let [.., last] = &mut times_rot[..] {
+                if last.is_none() {
+                    *last = Some(transform_duration.0);
+                }
+            }
+            if let [.., last] = &mut times_vol[..] {
                 if last.is_none() {
                     *last = Some(transform_duration.0);
                 }
@@ -1196,10 +1232,68 @@ impl<'a> Element<'a> for TransformElement {
                 )
             };
 
+            for (vol_idx, pos_idx) in vol_time_from_pos {
+                assert!(times_vol[vol_idx].is_none());
+                times_vol[vol_idx] = Some(pos_spline.as_ref().unwrap().grid()[pos_idx]);
+            }
+            for (vol_idx, rot_idx) in vol_time_from_rot {
+                assert!(times_vol[vol_idx].is_none());
+                times_vol[vol_idx] = Some(rot_spline.as_ref().unwrap().grid()[rot_idx]);
+            }
+
+            if !times_vol.is_empty() {
+                let mut unknown_times = vec![];
+                let mut last_known_time = times_vol[0].unwrap();
+                for i in 1..times_vol.len() {
+                    if let Some(current_time) = times_vol[i] {
+                        let diff =
+                            (current_time - last_known_time) / (unknown_times.len() + 1) as f32;
+                        let mut time = last_known_time;
+                        for idx in unknown_times.drain(..) {
+                            time += diff;
+                            times_vol[idx] = Some(time);
+                        }
+                        last_known_time = current_time;
+                    } else {
+                        unknown_times.push(i);
+                    }
+                }
+            }
+
+            let vol_spline = if volumes.is_empty() {
+                None
+            } else {
+                let first_node = self.nodes.first().unwrap();
+                if first_node.transform.volume.is_none() {
+                    parse_error!(
+                        span,
+                        "If any <transform> node has \"vol\", the first one needs it as well"
+                    );
+                }
+                let last_node = self.nodes.last().unwrap();
+                if last_node.transform.volume.is_none() && !closed_vol {
+                    parse_error!(
+                        span,
+                        "If any <transform> node has \"vol\", the last one needs it as well"
+                    );
+                }
+                Some(
+                    PiecewiseCubicCurve::new_shape_preserving(
+                        volumes,
+                        times_vol.into_iter().collect::<Option<Vec<f32>>>().unwrap(),
+                        closed_vol,
+                    )
+                    .map_err(|e| {
+                        ParseError::from_source(e, "Error creating ASDF volumes spline", span)
+                    })?,
+                )
+            };
+
             Box::new(SplineTransformer {
                 id: self.id,
                 pos_spline,
                 rot_spline,
+                vol_spline,
                 samplerate: scene.samplerate,
             }) as Box<dyn Transformer>
         };
@@ -1227,6 +1321,7 @@ struct TransformNodeElement {
     time: Option<XmlTime>,
     closed_pos: bool,
     closed_rot: bool,
+    closed_vol: bool,
     transform: Transform,
     speed: Option<f32>,
     tension: Option<f32>,
@@ -1264,6 +1359,14 @@ impl<'a> Element<'a> for TransformNodeElement {
                 rot = Some(parse_rot(rot_value)?);
             }
         }
+        let mut vol = None;
+        if let Some(vol_value) = attributes.get_value("vol") {
+            if vol_value.as_str() == "closed" {
+                self.closed_vol = true;
+            } else {
+                vol = Some(parse_vol(vol_value)?);
+            }
+        }
         self.transform = parse_transform(attributes)?.unwrap_or_default();
         if !self.closed_pos && pos.is_some() {
             assert!(self.transform.translation.is_none());
@@ -1272,6 +1375,10 @@ impl<'a> Element<'a> for TransformNodeElement {
         if !self.closed_rot && rot.is_some() {
             assert!(self.transform.rotation.is_none());
             self.transform.rotation = rot;
+        }
+        if !self.closed_vol && vol.is_some() {
+            assert!(self.transform.volume.is_none());
+            self.transform.volume = vol;
         }
 
         if let Some((speed_key, speed_value)) = attributes.get_item("speed") {
@@ -1283,11 +1390,14 @@ impl<'a> Element<'a> for TransformNodeElement {
             // TODO: disallow negative values?
             self.speed = Some(parse_attribute(speed_value)?);
         }
-        if self.closed_pos && self.transform.rotation.is_none() {
+        if (self.closed_pos || self.closed_vol) && self.transform.rotation.is_none() {
             self.closed_rot = true;
         }
-        if self.closed_rot && self.transform.translation.is_none() {
+        if (self.closed_rot || self.closed_vol) && self.transform.translation.is_none() {
             self.closed_pos = true;
+        }
+        if (self.closed_pos || self.closed_rot) && self.transform.volume.is_none() {
+            self.closed_vol = true;
         }
         if let Some((tension_key, tension_value)) = attributes.get_item("tension") {
             if self.closed_pos && self.closed_rot {
