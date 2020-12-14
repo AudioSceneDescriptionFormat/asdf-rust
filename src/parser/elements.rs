@@ -3,6 +3,7 @@ use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use asdfspline::Spline as _;
 use asdfspline::{AsdfPosSpline, AsdfRotSpline};
 use xmlparser as xml;
 
@@ -1011,6 +1012,7 @@ impl<'a> Element<'a> for TransformElement {
             let mut rotations = Vec::new();
             let mut times_pos = Vec::<Option<f32>>::new();
             let mut times_rot = Vec::<Option<f32>>::new();
+            let mut rot_time_from_pos = Vec::new();
             let mut speeds = Vec::<Option<f32>>::new();
             let mut tcb_pos = Vec::<[f32; 3]>::new();
             let mut tcb_rot = Vec::<[f32; 3]>::new();
@@ -1025,6 +1027,13 @@ impl<'a> Element<'a> for TransformElement {
                     assert!(node.tension.is_none());
                     assert!(node.continuity.is_none());
                     assert!(node.bias.is_none());
+                }
+
+                if time.is_none()
+                    && node.transform.translation.is_some()
+                    && node.transform.rotation.is_some()
+                {
+                    rot_time_from_pos.push((times_rot.len(), times_pos.len()));
                 }
 
                 let tcb = [
@@ -1133,65 +1142,64 @@ impl<'a> Element<'a> for TransformElement {
                 tcb_rot.remove(0);
                 tcb_rot.pop();
             }
+
+            let pos_spline = if positions.is_empty() {
+                None
+            } else {
+                let first_node = self.nodes.first().unwrap();
+                if first_node.transform.translation.is_none() {
+                    parse_error!(
+                        span,
+                        "If any <transform> node has \"pos\", the first one needs it as well"
+                    );
+                }
+                let last_node = self.nodes.last().unwrap();
+                if last_node.transform.translation.is_none() && !closed_pos {
+                    parse_error!(
+                        span,
+                        "If any <transform> node has \"pos\", the last one needs it as well"
+                    );
+                }
+                Some(
+                    AsdfPosSpline::new(positions, times_pos, speeds, tcb_pos, closed_pos).map_err(
+                        |e| ParseError::from_source(e, "Error creating ASDF position spline", span),
+                    )?,
+                )
+            };
+
+            for (rot_idx, pos_idx) in rot_time_from_pos {
+                assert!(times_rot[rot_idx].is_none());
+                times_rot[rot_idx] = Some(pos_spline.as_ref().unwrap().grid()[pos_idx]);
+            }
+
+            let rot_spline = if rotations.is_empty() {
+                None
+            } else {
+                let first_node = self.nodes.first().unwrap();
+                if first_node.transform.rotation.is_none() {
+                    parse_error!(
+                        span,
+                        "If any <transform> node has \"rot\", the first one needs it as well"
+                    );
+                }
+                let last_node = self.nodes.last().unwrap();
+                if last_node.transform.rotation.is_none() && !closed_rot {
+                    parse_error!(
+                        span,
+                        "If any <transform> node has \"rot\", the last one needs it as well"
+                    );
+                }
+                Some(
+                    AsdfRotSpline::new(rotations, times_rot, tcb_rot, closed_rot).map_err(|e| {
+                        ParseError::from_source(e, "Error creating ASDF rotations spline", span)
+                    })?,
+                )
+            };
+
             Box::new(SplineTransformer {
                 id: self.id,
-                pos_spline: if positions.is_empty() {
-                    None
-                } else {
-                    let first_node = self.nodes.first().unwrap();
-                    if first_node.transform.translation.is_none() {
-                        parse_error!(
-                            span,
-                            "If any <transform> node has \"pos\", the first one needs it as well"
-                        );
-                    }
-                    let last_node = self.nodes.last().unwrap();
-                    if last_node.transform.translation.is_none() && !closed_pos {
-                        parse_error!(
-                            span,
-                            "If any <transform> node has \"pos\", the last one needs it as well"
-                        );
-                    }
-                    Some(
-                        AsdfPosSpline::new(positions, times_pos, speeds, tcb_pos, closed_pos)
-                            .map_err(|e| {
-                                ParseError::from_source(
-                                    e,
-                                    "Error creating ASDF position spline",
-                                    span,
-                                )
-                            })?,
-                    )
-                },
-                rot_spline: if rotations.is_empty() {
-                    None
-                } else {
-                    let first_node = self.nodes.first().unwrap();
-                    if first_node.transform.rotation.is_none() {
-                        parse_error!(
-                            span,
-                            "If any <transform> node has \"rot\", the first one needs it as well"
-                        );
-                    }
-                    let last_node = self.nodes.last().unwrap();
-                    if last_node.transform.rotation.is_none() && !closed_rot {
-                        parse_error!(
-                            span,
-                            "If any <transform> node has \"rot\", the last one needs it as well"
-                        );
-                    }
-                    Some(
-                        AsdfRotSpline::new(rotations, times_rot, tcb_rot, closed_rot).map_err(
-                            |e| {
-                                ParseError::from_source(
-                                    e,
-                                    "Error creating ASDF rotations spline",
-                                    span,
-                                )
-                            },
-                        )?,
-                    )
-                },
+                pos_spline,
+                rot_spline,
                 samplerate: scene.samplerate,
             }) as Box<dyn Transformer>
         };
