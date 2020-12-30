@@ -13,6 +13,7 @@ typedef struct _asdf_tilde {
   float **outlet_ptrs;
   AsdfScene *scene;
   AsdfTransform *transforms;
+  AsdfSourceInfo **sourceinfo;
   uint32_t file_sources;
   uint32_t live_sources;
   float **file_source_ptrs;
@@ -23,6 +24,7 @@ typedef struct _asdf_tilde {
   bool rolling;
   bool seeking;
   uint64_t frame;
+  bool send_source_ids;
 } t_asdf_tilde;
 
 /* f: maximum number of (file) sources */
@@ -59,6 +61,15 @@ void clear_scene(t_asdf_tilde *x)
         x->transforms,
         (1 + x->file_sources + x->live_sources) * sizeof(AsdfTransform));
     x->transforms = NULL;
+  }
+  if (x->sourceinfo) {
+    for (uint32_t i = 0; i < x->file_sources + x->live_sources; i++) {
+      asdf_sourceinfo_free(x->sourceinfo[i]);
+    }
+    freebytes(
+        x->sourceinfo,
+        (x->file_sources + x->live_sources) * sizeof(AsdfSourceInfo *));
+    x->sourceinfo = NULL;
   }
   asdf_scene_free(x->scene);
   x->scene = NULL;
@@ -153,9 +164,14 @@ void asdf_tilde_open(t_asdf_tilde *x, t_symbol *s)
 
   update_buffers(x);
 
+  x->sourceinfo = getbytes(
+      (x->file_sources + x->live_sources) * sizeof(AsdfSourceInfo *));
+  for (uint32_t i = 0; i < x->file_sources + x->live_sources; i++) {
+    x->sourceinfo[i] = asdf_get_sourceinfo(x->scene, i);
+  }
+
   /* TODO: send number of sources to outlet */
   /* TODO: send id/name/model of sources to outlet */
-  /*       asdf_get_sourceinfo()/asdf_sourceinfo_free() */
 }
 
 /* f: 1 for play, 0 for pause */
@@ -197,26 +213,35 @@ void asdf_tilde_seek(t_asdf_tilde *x, t_floatarg f)
   }
 }
 
+void asdf_tilde_source_numbers(t_asdf_tilde *x, t_floatarg f)
+{
+  float arg = f;
+  if (arg == 0.0) {
+    x->send_source_ids = true;
+  } else if (arg == 1.0) {
+    x->send_source_ids = false;
+  } else {
+    pd_error(&x->x_obj,
+        "asdf~: \"source-numbers\" should be followed by 0 or 1, not %f", arg);
+  }
+}
+
 void send_transform(
-    size_t source_number,
+    size_t offset,
     AsdfTransform *current,
     AsdfTransform *previous,
     t_outlet *outlet,
     t_atom *argv)
 {
-  size_t offset;
   t_symbol *sym;
-  if (source_number) {
-    SETFLOAT(argv, source_number);
-    offset = 1;
+  if (offset) {
     sym = gensym("src");
     if (current->active != previous->active) {
-      SETSYMBOL(argv + 1, gensym("active"));
-      SETFLOAT(argv + 2, current->active);
+      SETSYMBOL(argv + offset, gensym("active"));
+      SETFLOAT(argv + offset + 1, current->active);
       outlet_anything(outlet, sym, 3, argv);
     }
   } else {
-    offset = 0;
     sym = gensym("ref");
     /* NB: we assume the reference to be always active */
   }
@@ -237,9 +262,32 @@ void send_transform(
       previous->pos[2] = current->pos[2];
     }
 
-    /* TODO: quat */
-    /* TODO: switch for quaternion vs. angles? */
-    /* TODO: other parts of transform (vol, ...) */
+    if (!previous->active
+      || current->rot_v[0] != previous->rot_v[0]
+      || current->rot_v[1] != previous->rot_v[1]
+      || current->rot_v[2] != previous->rot_v[2]
+      || current->rot_s != previous->rot_s)
+    {
+      SETSYMBOL(argv + offset, gensym("quat"));
+      SETFLOAT(argv + offset + 1, current->rot_v[0]);
+      SETFLOAT(argv + offset + 2, current->rot_v[1]);
+      SETFLOAT(argv + offset + 3, current->rot_v[2]);
+      SETFLOAT(argv + offset + 4, current->rot_s);
+      outlet_anything(outlet, sym, offset + 5, argv);
+      previous->rot_v[0] = current->rot_v[0];
+      previous->rot_v[1] = current->rot_v[1];
+      previous->rot_v[2] = current->rot_v[2];
+      previous->rot_s = current->rot_s;
+    }
+
+    if (!previous->active
+      || current->vol != previous->vol)
+    {
+      SETSYMBOL(argv + offset, gensym("vol"));
+      SETFLOAT(argv + offset + 1, current->vol);
+      outlet_anything(outlet, sym, offset + 2, argv);
+      previous->vol = current->vol;
+    }
   }
   previous->active = current->active;
 }
@@ -261,11 +309,15 @@ void asdf_tilde_bang(t_asdf_tilde *x)
   /* TODO: option for getting values whether or not they have changed? */
 
   for (size_t idx = 0; idx < x->file_sources + x->live_sources; idx++) {
+    if (x->send_source_ids) {
+      SETSYMBOL(argv, gensym(x->sourceinfo[idx]->id));
+    } else {
+      /* NB: one-based source numbers per SSR convention */
+      SETFLOAT(argv, idx + 1);
+    }
     current = asdf_get_source_transform(x->scene, idx, x->frame);
-
-    /* NB: one-based source numbers per SSR convention */
     AsdfTransform *previous = &x->transforms[idx + 1];
-    send_transform(idx + 1, &current, previous, x->x_obj.ob_outlet, argv);
+    send_transform(1, &current, previous, x->x_obj.ob_outlet, argv);
   }
   current = asdf_get_reference_transform(x->scene, x->frame);
   /* NB: source number 0 means reference */
@@ -357,6 +409,10 @@ void asdf_tilde_setup(void)
 
   class_addmethod(asdf_tilde_class,
       (t_method)asdf_tilde_seek, gensym("seek"), A_DEFFLOAT, 0);
+
+  class_addmethod(asdf_tilde_class,
+      (t_method)asdf_tilde_source_numbers, gensym("source-numbers"),
+      A_DEFFLOAT, 0);
 
   class_addbang(asdf_tilde_class, asdf_tilde_bang);
 
