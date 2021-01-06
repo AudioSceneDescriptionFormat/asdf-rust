@@ -682,8 +682,10 @@ impl<'a> Element<'a> for ClipElement {
                 );
             }
             // Implicit <channel> element for mono file
-            let mut channel = ChannelElement::default();
-            channel.source_id = self.source_id.clone();
+            let channel = ChannelElement {
+                source_id: self.source_id.clone(),
+                ..Default::default()
+            };
             assert!(channel.transform.is_none());
             self.channels.push(channel);
         }

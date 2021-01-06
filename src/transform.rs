@@ -78,9 +78,7 @@ impl Transform {
     }
 }
 
-pub fn parse_transform<'a>(
-    attributes: &mut Attributes<'a>,
-) -> Result<Option<Transform>, ParseError> {
+pub fn parse_transform(attributes: &mut Attributes<'_>) -> Result<Option<Transform>, ParseError> {
     let mut result: Option<Transform> = None;
 
     let mut out_attributes = Attributes::new();
