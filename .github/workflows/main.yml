@@ -54,7 +54,7 @@ jobs:
       - name: Install Pure Data
         if: startsWith(matrix.os, 'macos')
         run: |
-          brew cask install pd
+          brew install --cask pd
           PD_APP=$(ls -d /Applications/Pd-*.app)
           echo "PDINCLUDEDIR=$PD_APP/Contents/Resources/src" >> $GITHUB_ENV
       - name: Build Pure Data external
