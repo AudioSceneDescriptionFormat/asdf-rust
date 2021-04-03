@@ -44,7 +44,7 @@ impl<E: Into<Box<dyn Error>>> From<E> for BoxedError {
 impl std::fmt::Debug for BoxedError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "{}", self.0).unwrap();
-        let sources = std::iter::successors(self.0.source(), |e| e.source());
+        let sources = std::iter::successors(self.0.source(), |&e| e.source());
         for s in sources {
             write!(fmt, "\nerror details: {}", s).unwrap();
         }
