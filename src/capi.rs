@@ -94,7 +94,7 @@ impl Drop for AsdfSourceInfo {
     }
 }
 
-#[allow(non_camel_case_types)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(C)]
 pub enum AsdfStreamingResult {
     ASDF_STREAMING_SUCCESS,
