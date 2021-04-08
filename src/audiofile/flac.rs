@@ -1,5 +1,6 @@
 /// https://xiph.org/flac/api/group__flac__stream__decoder.html
 use std::io::{self, Read, Seek};
+use std::marker::PhantomPinned;
 use std::pin::Pin;
 
 use libc::c_void;
@@ -17,6 +18,7 @@ struct ClientData<R> {
     channel_assignment: ffi::FLAC__ChannelAssignment,
     bits_per_sample: u32,
     last_error_status: Option<ffi::FLAC__StreamDecoderErrorStatus>,
+    _marker: PhantomPinned,
 }
 
 pub struct File<R> {
@@ -245,6 +247,7 @@ where
             channel_assignment: 0,
             bits_per_sample: 0,
             last_error_status: None,
+            _marker: PhantomPinned,
         });
 
         let decoder = unsafe { ffi::FLAC__stream_decoder_new() };
