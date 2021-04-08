@@ -1,6 +1,5 @@
 use std::io::{self, Read, Seek};
 use std::mem::MaybeUninit;
-use std::pin::Pin;
 
 use libc::{c_int, c_void};
 
@@ -12,7 +11,7 @@ const EIO: errno::Errno = errno::Errno(5);
 
 pub struct File<R> {
     #[allow(dead_code)]
-    reader: Pin<Box<R>>,
+    reader: Box<R>,
     decoder: ffi::mp3dec_ex_t,
     current_block: Block,
 }
@@ -65,7 +64,7 @@ where
     R: Read + Seek,
 {
     pub fn new(reader: R) -> Result<File<R>, OpenError> {
-        let reader = Box::pin(reader);
+        let reader = Box::new(reader);
         let mut decoder = MaybeUninit::<ffi::mp3dec_ex_t>::uninit();
         let ptr_to_reader = &*reader as *const R as *mut c_void;
         let mut io = ffi::mp3dec_io_t {
