@@ -5,17 +5,9 @@ env:
   RUST_BACKTRACE: 1
   RUST_LOG: info
 jobs:
-  build-and-test:
-    strategy:
-      matrix:
-        include:
-        - os: macos-latest
-        - os: windows-latest
-          toolchain-suffix: -gnu
-        - os: windows-latest
-          toolchain-suffix: -msvc
-        - os: ubuntu-latest
-    runs-on: ${{ matrix.os }}
+
+  Linux:
+    runs-on: ubuntu-latest
     steps:
       - name: Clone Git repository
         uses: actions/checkout@v2
@@ -25,37 +17,186 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable${{ matrix.toolchain-suffix }}
+          toolchain: stable
           override: true
       - name: Run tests
         run: |
           cargo test --workspace --all-features
-      - name: Install cargo-c
+      - name: Install C API
         run: |
           cargo install cargo-c
-      - name: Build C API
-        run: |
-          cargo cbuild --verbose --release
-      - name: Install C API
-        if: startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'ubuntu')
-        run: |
           cargo cinstall --verbose --release --destdir=temp
           sudo cp -r temp/usr/local/* /usr/local/
+      - name: Update linker path
+        run: |
+          sudo ldconfig
       - name: Install Pure Data
-        if: startsWith(matrix.os, 'ubuntu')
         run: |
           sudo apt-get install --no-install-recommends puredata-dev
+      - name: Build Pure Data external
+        working-directory: pure-data
+        run: |
+          make
+          make install DESTDIR="$(pwd)" pkglibdir=/pkglibdir
+      - name: Fix dependencies
+        working-directory: pure-data
+        run: |
+          sh pd-lib-builder-iem-ci/localdeps/localdeps.linux.sh pkglibdir/asdf/asdf~.pd_linux
+      - name: Upload Pd external
+        uses: actions/upload-artifact@v2
+        with:
+          name: Linux Pd external
+          path: pure-data/pkglibdir/asdf/*
+
+  macOS:
+    runs-on: macos-latest
+    steps:
+      - name: Clone Git repository
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Run tests
+        run: |
+          cargo test --workspace --all-features
+      - name: Install C API
+        run: |
+          cargo install cargo-c
+          cargo cinstall --verbose --release
       - name: Install Pure Data
-        if: startsWith(matrix.os, 'macos')
         run: |
           brew install --cask pd
           PD_APP=$(ls -d /Applications/Pd-*.app)
           echo "PDINCLUDEDIR=$PD_APP/Contents/Resources/src" >> $GITHUB_ENV
       - name: Build Pure Data external
-        if: startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'ubuntu')
         working-directory: pure-data
         run: |
           make
+          make install DESTDIR="$(pwd)" pkglibdir=/pkglibdir
+      - name: Fix dependencies
+        working-directory: pure-data
+        run: |
+          sh pd-lib-builder-iem-ci/localdeps/localdeps.macos.sh pkglibdir/asdf/asdf~.pd_darwin
+      - name: Upload Pd external
+        uses: actions/upload-artifact@v2
+        with:
+          name: macOS Pd external
+          path: pure-data/pkglibdir/asdf/*
+
+  Windows-MSYS2:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Install MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            make
+            unzip
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-rust
+            mingw-w64-x86_64-cargo-c
+            mingw-w64-x86_64-ntldd-git
+      - name: Clone Git repository
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Run tests
+        run: |
+          cargo test --workspace --all-features
+      - name: Install ASDF
+        run: |
+          cargo cinstall --verbose --release --prefix=/mingw64
+      - name: Install Pure Data
+        run: |
+          wget -q -O Pd.zip http://msp.ucsd.edu/Software/pd-0.51-3.msw.zip
+          rm -rf "${PROGRAMFILES}/pd" && mkdir -p "${PROGRAMFILES}/pd"
+          unzip -q Pd.zip -d "${PROGRAMFILES}/pd"
+          mv -v "${PROGRAMFILES}/pd"/*/* "${PROGRAMFILES}/pd"
+          rm -f Pd.zip
+          export PD="${PROGRAMFILES}/pd/bin/pd.com"
+      - name: Build Pure Data external
+        working-directory: pure-data
+        run: |
+          make
+          make install DESTDIR="$(pwd)" pkglibdir=/pkglibdir
+      - name: Fix dll dependencies
+        working-directory: pure-data
+        run: |
+          sh pd-lib-builder-iem-ci/localdeps/localdeps.win.sh pkglibdir/asdf/asdf~.dll
+      - name: Upload Pd external
+        uses: actions/upload-artifact@v2
+        with:
+          name: Windows Pd external
+          path: pure-data/pkglibdir/asdf/*
+
+  Windows-MSVC:
+    runs-on: windows-latest
+    steps:
+      - name: Clone Git repository
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable-msvc
+          override: true
+      - name: Run tests
+        run: |
+          cargo test --workspace --all-features
+      - name: Build and install C API
+        run: |
+          cargo install cargo-c
+          cargo cinstall --verbose --release
+
+  deken-package:
+    runs-on: ubuntu-latest
+    needs: [Linux, macOS, Windows-MSYS2]
+    steps:
+      - name: Clone Git repository
+        uses: actions/checkout@v2
+      - name: Retrieve Linux external
+        uses: actions/download-artifact@v2
+        with:
+          name: Linux Pd external
+          path: asdf
+      - name: Retrieve macOS external
+        uses: actions/download-artifact@v2
+        with:
+          name: macOS Pd external
+          path: asdf
+      - name: Retrieve Windows external
+        uses: actions/download-artifact@v2
+        with:
+          name: Windows Pd external
+          path: asdf
+      - name: Copy help patch and source file
+        run: |
+          cp pure-data/asdf~* asdf
+      - name: Install deken
+        run: |
+          sudo apt-get install --no-install-recommends deken
+          # work-arounds from https://github.com/pure-data/deken/issues/247:
+          mkdir ~/.deken
+          python3 -m pip install hy==0.19
+      - name: Run deken
+        run: |
+          deken package -v $(git describe --tags --always) --objects pure-data/objects.txt asdf
+      - name: Upload deken package
+        uses: actions/upload-artifact@v2
+        with:
+          name: Deken package
+          path: "*.dek*"
 
   check-code:
     runs-on: ubuntu-latest
