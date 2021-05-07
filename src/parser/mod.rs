@@ -370,11 +370,9 @@ impl<'a> GetAttributeValue for Attributes<'a> {
     }
 
     fn get_item(&mut self, name: &str) -> Option<(xml::StrSpan<'_>, xml::StrSpan<'_>)> {
-        if let Some(idx) = self.iter().position(|&(k, _)| k.as_str() == name) {
-            Some(self.remove(idx))
-        } else {
-            None
-        }
+        self.iter()
+            .position(|&(k, _)| k.as_str() == name)
+            .map(|idx| self.remove(idx))
     }
 }
 
