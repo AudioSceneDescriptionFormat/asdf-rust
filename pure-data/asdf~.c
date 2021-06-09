@@ -1,6 +1,7 @@
 #include "asdf.h"
 #include "m_pd.h"
 #include <math.h>  /* for ceil() */
+#include <stdio.h>  /* for snprintf() */
 
 /* class */
 static t_class *asdf_tilde_class;
@@ -8,6 +9,7 @@ static t_class *asdf_tilde_class;
 /* dataspace */
 typedef struct _asdf_tilde {
   t_object  x_obj;  /* required, has to be the first entry */
+  t_canvas* x_canvas;
   uint32_t blocksize;
   uint32_t signal_outlets;
   float **outlet_ptrs;
@@ -37,6 +39,7 @@ void *asdf_tilde_new(t_floatarg f)
     error("asdf~: argument has to be a non-negative integer");
     return NULL;
   }
+  x->x_canvas = canvas_getcurrent();
   x->blocksize = sys_getblksize();
 
   /* first outlet for messages */
@@ -116,7 +119,21 @@ void asdf_tilde_open(t_asdf_tilde *x, t_symbol *s)
     }
     clear_scene(x);
   }
-  post("asdf~: opening ASDF scene \"%s\"", s->s_name);
+
+  char dirresult[MAXPDSTRING], *nameresult;
+  int fd = canvas_open(x->x_canvas, s->s_name, "", dirresult, &nameresult,
+      sizeof(dirresult), 0 /* open as binary */);
+  if (fd < 0) {
+    pd_error(&x->x_obj, "asdf~: Error opening \"%s\"", s->s_name);
+    return;
+  }
+  /* we don't actually need the file descriptor: */
+  sys_close(fd);
+
+  char filename[MAXPDSTRING];
+  snprintf(filename, sizeof(filename), "%s/%s", dirresult, nameresult);
+
+  post("asdf~: opening ASDF scene \"%s\"", filename);
   /* TODO: reasonable default values? */
   /* TODO: ability to overwrite default values? */
   float sleep_time = 0.1;  /* seconds */
@@ -125,7 +142,7 @@ void asdf_tilde_open(t_asdf_tilde *x, t_symbol *s)
   uint32_t buffer_blocks = ceil(buffer_time * samplerate / (float)x->blocksize);
   uint64_t usleeptime = sleep_time * 1000.0f * 1000.0f;
   x->scene = asdf_scene_new(
-      s->s_name,
+      filename,
       samplerate,
       x->blocksize,
       buffer_blocks,
