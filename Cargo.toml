@@ -16,7 +16,7 @@ subdirectory = false
 
 [dependencies]
 asdfspline = { path = "asdfspline" }
-rtrb = "0.1"
+rtrb = "0.2"
 rsor = "0.1"
 errno = "*"
 libflac-sys = "0.2"

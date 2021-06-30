@@ -57,11 +57,11 @@ impl FileStreamer {
         sleeptime: Duration,
     ) -> FileStreamer {
         let chunksize = blocksize as usize * channels as usize;
-        let (mut ready_producer, ready_consumer) = rtrb::RingBuffer::new(1).split();
+        let (mut ready_producer, ready_consumer) = rtrb::RingBuffer::new(1);
         let (seek_producer, mut seek_consumer) =
-            rtrb::RingBuffer::<(u64, rtrb::Consumer<f32>)>::new(1).split();
+            rtrb::RingBuffer::<(u64, rtrb::Consumer<f32>)>::new(1);
         let (mut data_producer, data_consumer) =
-            rtrb::RingBuffer::with_chunks(buffer_blocks as usize, chunksize as usize).split();
+            rtrb::RingBuffer::new(buffer_blocks as usize * chunksize as usize);
 
         let reader_thread_keep_reading = Arc::new(AtomicBool::new(true));
         let keep_reading = Arc::clone(&reader_thread_keep_reading);
@@ -73,7 +73,10 @@ impl FileStreamer {
 
             while keep_reading.load(Ordering::Acquire) {
                 if let Ok((frame, mut queue)) = seek_consumer.pop() {
-                    rtrb::RingBuffer::reset(&mut data_producer, &mut queue);
+                    // NB: By owning data_producer, we know that no new items can be written while
+                    //     we drain the consumer:
+                    queue.read_chunk(queue.slots()).unwrap().commit_all();
+                    debug_assert_eq!(data_producer.slots(), data_producer.buffer().capacity());
                     data_consumer = Some(queue);
                     current_frame = frame;
                     seek_frame = frame;
