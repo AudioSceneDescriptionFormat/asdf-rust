@@ -24,7 +24,8 @@ jobs:
           cargo test --workspace --all-features
       - name: Install C API
         run: |
-          cargo install cargo-c
+          # See https://github.com/lu-zero/cargo-c/issues/216 for version constraint
+          cargo install --version 0.8.2 cargo-c
           cargo cinstall --verbose --release --destdir=temp
           sudo cp -r temp/usr/local/* /usr/local/
       - name: Update linker path
@@ -66,7 +67,8 @@ jobs:
           cargo test --workspace --all-features
       - name: Install C API
         run: |
-          cargo install cargo-c
+          # See https://github.com/lu-zero/cargo-c/issues/216 for version constraint
+          cargo install --version 0.8.2 cargo-c
           cargo cinstall --verbose --release
       - name: Install Pure Data
         run: |
@@ -156,7 +158,8 @@ jobs:
           cargo test --workspace --all-features
       - name: Build and install C API
         run: |
-          cargo install cargo-c
+          # See https://github.com/lu-zero/cargo-c/issues/216 for version constraint
+          cargo install --version 0.8.2 cargo-c
           cargo cinstall --verbose --release
 
   deken-package:
