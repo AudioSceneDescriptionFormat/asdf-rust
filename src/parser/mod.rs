@@ -92,8 +92,8 @@ struct ConstantTransformer {
 }
 
 impl Transformer for ConstantTransformer {
-    fn id(&self) -> Option<&String> {
-        self.id.as_ref()
+    fn id(&self) -> Option<&str> {
+        self.id.as_deref()
     }
 
     fn get_transform(&self, _frame: u64) -> Option<Transform> {
@@ -106,8 +106,8 @@ struct EmptyTransformer {
 }
 
 impl Transformer for EmptyTransformer {
-    fn id(&self) -> Option<&String> {
-        self.id.as_ref()
+    fn id(&self) -> Option<&str> {
+        self.id.as_deref()
     }
 
     fn get_transform(&self, _frame: u64) -> Option<Transform> {
@@ -147,8 +147,8 @@ struct SplineTransformer {
 }
 
 impl Transformer for SplineTransformer {
-    fn id(&self) -> Option<&String> {
-        self.id.as_ref()
+    fn id(&self) -> Option<&str> {
+        self.id.as_deref()
     }
 
     fn get_transform(&self, frame: u64) -> Option<Transform> {

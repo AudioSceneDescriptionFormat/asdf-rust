@@ -71,19 +71,19 @@ impl Scene {
         self.sources.len() as u32 - self.file_sources()
     }
 
-    pub fn get_source_id(&self, index: u32) -> Option<&String> {
-        self.sources[index as usize].id.as_ref()
+    pub fn get_source_id(&self, index: u32) -> Option<&str> {
+        self.sources[index as usize].id.as_deref()
     }
 
-    pub fn get_source_name(&self, index: u32) -> Option<&String> {
-        self.sources[index as usize].name.as_ref()
+    pub fn get_source_name(&self, index: u32) -> Option<&str> {
+        self.sources[index as usize].name.as_deref()
     }
 
-    pub fn get_source_model(&self, index: u32) -> Option<&String> {
-        self.sources[index as usize].model.as_ref()
+    pub fn get_source_model(&self, index: u32) -> Option<&str> {
+        self.sources[index as usize].model.as_deref()
     }
 
-    pub fn get_source_port(&self, index: u32) -> Option<&String> {
+    pub fn get_source_port(&self, index: u32) -> Option<&str> {
         if index >= self.file_sources() {
             Some(&self.ports[(index - self.file_sources()) as usize])
         } else {
@@ -109,7 +109,7 @@ impl Scene {
     pub fn get_source_transform(&self, source_idx: u32, frame: u64) -> Option<Transform> {
         // NB: This function is supposed to be realtime-safe!
         let source = &self.sources[source_idx as usize];
-        let t = self.get_transform_applying_to(source.id.as_ref(), frame);
+        let t = self.get_transform_applying_to(source.id.as_deref(), frame);
         if let Some(mut transform) = source.transform.clone() {
             transform.apply(t);
             Some(transform)
@@ -120,8 +120,7 @@ impl Scene {
 
     pub fn get_reference_transform(&self, frame: u64) -> Option<Transform> {
         let mut reference_transform = self.reference_transform.clone();
-        reference_transform
-            .apply(self.get_transform_applying_to(Some(&REFERENCE_ID.into()), frame));
+        reference_transform.apply(self.get_transform_applying_to(Some(REFERENCE_ID), frame));
         Some(reference_transform)
     }
 
@@ -149,7 +148,7 @@ impl Scene {
         None
     }
 
-    fn get_transform_applying_to(&self, id: Option<&String>, frame: u64) -> Option<Transform> {
+    fn get_transform_applying_to(&self, id: Option<&str>, frame: u64) -> Option<Transform> {
         let transformers = self.transformer_map.get(id?)?;
         transformers.iter().fold(None, |transform, &idx| {
             // NB: Recursive call. Cyclic dependencies have been ruled out on scene init
@@ -159,7 +158,7 @@ impl Scene {
 }
 
 trait Transformer {
-    fn id(&self) -> Option<&String>;
+    fn id(&self) -> Option<&str>;
     /// begin and end is checked before calling this
     fn get_transform(&self, frame: u64) -> Option<Transform>;
 }

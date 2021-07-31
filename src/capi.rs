@@ -69,16 +69,14 @@ pub struct AsdfSourceInfo {
 }
 
 impl AsdfSourceInfo {
-    fn new(source: &Source, port: Option<&String>) -> AsdfSourceInfo {
-        fn char_ptr(s: Option<&String>) -> *const c_char {
-            CString::new(s.map(String::as_ref).unwrap_or(""))
-                .unwrap()
-                .into_raw()
+    fn new(source: &Source, port: Option<&str>) -> AsdfSourceInfo {
+        fn char_ptr(s: Option<&str>) -> *const c_char {
+            CString::new(s.unwrap_or("")).unwrap().into_raw()
         }
         AsdfSourceInfo {
-            id: char_ptr(source.id.as_ref()),
-            name: char_ptr(source.name.as_ref()),
-            model: char_ptr(source.model.as_ref()),
+            id: char_ptr(source.id.as_deref()),
+            name: char_ptr(source.name.as_deref()),
+            model: char_ptr(source.model.as_deref()),
             port: char_ptr(port),
         }
     }
