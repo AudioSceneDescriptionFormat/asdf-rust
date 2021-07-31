@@ -170,7 +170,7 @@ impl FromStr for XmlTime {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim_end();
 
-        if let Some(s) = s.strip_suffix("%") {
+        if let Some(s) = s.strip_suffix('%') {
             let f = f32::from_str(s)? / 100.0;
             // TODO: check valid range (>= 0; <= 100?)
             Ok(XmlTime::Fraction(f))

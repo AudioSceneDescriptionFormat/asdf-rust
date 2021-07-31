@@ -349,7 +349,7 @@ impl std::convert::TryFrom<SceneInitializer> for Scene {
         };
         for source in &scene.sources {
             if let Some(id) = &source.id {
-                scene.check_integrity(&id, HashSet::new())?;
+                scene.check_integrity(id, HashSet::new())?;
             }
         }
         scene.check_integrity("reference", HashSet::new())?;

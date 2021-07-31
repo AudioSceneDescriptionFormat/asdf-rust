@@ -38,7 +38,7 @@ impl<'a> Iterator for ActiveIter<'a> {
     type Item = &'a mut PlaylistEntry;
 
     fn next(&mut self) -> Option<&'a mut PlaylistEntry> {
-        while let Some(entry) = self.inner.next() {
+        for entry in &mut self.inner {
             if entry.begin < self.block_end && self.block_start < (entry.begin + entry.duration) {
                 return Some(entry);
             }
@@ -105,7 +105,7 @@ impl FileStreamer {
                             file.seek(0)?;
                             (entry.begin - current_frame) as u32
                         };
-                        file.fill_channels(&channel_map, blocksize, offset, target)?;
+                        file.fill_channels(channel_map, blocksize, offset, target)?;
                     }
                     current_frame += u64::from(blocksize);
 
