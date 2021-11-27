@@ -20,7 +20,7 @@ pub struct FileStreamer {
     seek_producer: rtrb::Producer<(u64, rtrb::Consumer<f32>)>,
     data_consumer: Option<rtrb::Consumer<f32>>,
     reader_thread: Option<thread::JoinHandle<Result<(), BoxedError>>>,
-    reader_thread_keep_reading: Arc<AtomicBool>,
+    keep_reading: Arc<AtomicBool>,
     channels: u32,
     blocksize: u32,
     previously_rolling: bool,
@@ -63,77 +63,80 @@ impl FileStreamer {
         let (mut data_producer, data_consumer) =
             rtrb::RingBuffer::new(buffer_blocks as usize * chunksize as usize);
 
-        let reader_thread_keep_reading = Arc::new(AtomicBool::new(true));
-        let keep_reading = Arc::clone(&reader_thread_keep_reading);
-        let reader_thread = thread::spawn(move || {
-            let mut data_consumer = Some(data_consumer);
-            let mut current_frame = 0;
-            let mut seek_frame = 0;
-            let mut sos = Slice::with_capacity(channels as usize);
+        let keep_reading = Arc::new(AtomicBool::new(true));
+        let reader_thread = {
+            let keep_reading = Arc::clone(&keep_reading);
+            thread::spawn(move || {
+                let mut data_consumer = Some(data_consumer);
+                let mut current_frame = 0;
+                let mut seek_frame = 0;
+                let mut sos = Slice::with_capacity(channels as usize);
 
-            while keep_reading.load(Ordering::Acquire) {
-                if let Ok((frame, mut queue)) = seek_consumer.pop() {
-                    // NB: By owning data_producer, we know that no new items can be written while
-                    //     we drain the consumer:
-                    queue.read_chunk(queue.slots()).unwrap().commit_all();
-                    debug_assert_eq!(data_producer.slots(), data_producer.buffer().capacity());
-                    data_consumer = Some(queue);
-                    current_frame = frame;
-                    seek_frame = frame;
-                }
-                if let Ok(mut chunk) = data_producer.write_chunk(chunksize) {
-                    let target = {
-                        let (first, second) = chunk.as_mut_slices();
-                        debug_assert!(second.is_empty());
-                        sos.from_iter_mut(first.chunks_mut(blocksize as usize))
-                    };
-                    debug_assert_eq!(target.len(), channels as usize);
-
-                    // NB: Slice from RingBuffer is already filled with zeros
-
-                    let mut active_files = ActiveIter {
-                        block_start: current_frame,
-                        block_end: current_frame + u64::from(blocksize),
-                        inner: playlist.iter_mut(),
-                    };
-                    // TODO: Is linear search too slow? How long can playlists be?
-                    for entry in &mut active_files {
-                        let (file, channel_map) = &mut file_storage[entry.idx];
-                        let offset = if entry.begin < current_frame {
-                            if current_frame == seek_frame {
-                                file.seek(current_frame - entry.begin)?;
-                            }
-                            0
-                        } else {
-                            file.seek(0)?;
-                            (entry.begin - current_frame) as u32
+                while keep_reading.load(Ordering::Acquire) {
+                    if let Ok((frame, mut queue)) = seek_consumer.pop() {
+                        // NB: By owning data_producer, we know that no new items can be written while
+                        //     we drain the consumer:
+                        queue.read_chunk(queue.slots()).unwrap().commit_all();
+                        debug_assert_eq!(data_producer.slots(), data_producer.buffer().capacity());
+                        data_consumer = Some(queue);
+                        current_frame = frame;
+                        seek_frame = frame;
+                    }
+                    if let Ok(mut chunk) = data_producer.write_chunk(chunksize) {
+                        let target = {
+                            let (first, second) = chunk.as_mut_slices();
+                            debug_assert!(second.is_empty());
+                            sos.from_iter_mut(first.chunks_mut(blocksize as usize))
                         };
-                        file.fill_channels(channel_map, blocksize, offset, target)?;
-                    }
-                    current_frame += u64::from(blocksize);
+                        debug_assert_eq!(target.len(), channels as usize);
 
-                    // Make sure the block is queued before data_consumer is sent
-                    chunk.commit_all();
+                        // NB: Slice from RingBuffer is already filled with zeros
 
-                    if current_frame - seek_frame >= u64::from(buffer_blocks) * u64::from(blocksize)
-                    {
-                        if let Some(data_consumer) = data_consumer.take() {
-                            // There is only one data queue, push() will always succeed
-                            ready_producer.push((seek_frame, data_consumer)).unwrap();
+                        let mut active_files = ActiveIter {
+                            block_start: current_frame,
+                            block_end: current_frame + u64::from(blocksize),
+                            inner: playlist.iter_mut(),
+                        };
+                        // TODO: Is linear search too slow? How long can playlists be?
+                        for entry in &mut active_files {
+                            let (file, channel_map) = &mut file_storage[entry.idx];
+                            let offset = if entry.begin < current_frame {
+                                if current_frame == seek_frame {
+                                    file.seek(current_frame - entry.begin)?;
+                                }
+                                0
+                            } else {
+                                file.seek(0)?;
+                                (entry.begin - current_frame) as u32
+                            };
+                            file.fill_channels(channel_map, blocksize, offset, target)?;
                         }
+                        current_frame += u64::from(blocksize);
+
+                        // Make sure the block is queued before data_consumer is sent
+                        chunk.commit_all();
+
+                        if current_frame - seek_frame
+                            >= u64::from(buffer_blocks) * u64::from(blocksize)
+                        {
+                            if let Some(data_consumer) = data_consumer.take() {
+                                // There is only one data queue, push() will always succeed
+                                ready_producer.push((seek_frame, data_consumer)).unwrap();
+                            }
+                        }
+                    } else {
+                        thread::sleep(sleeptime);
                     }
-                } else {
-                    thread::sleep(sleeptime);
                 }
-            }
-            Ok(())
-        });
+                Ok(())
+            })
+        };
         FileStreamer {
             ready_consumer,
             seek_producer,
             data_consumer: None,
             reader_thread: Some(reader_thread),
-            reader_thread_keep_reading,
+            keep_reading,
             channels,
             blocksize,
             previously_rolling: false,
@@ -235,8 +238,7 @@ impl FileStreamer {
 
 impl Drop for FileStreamer {
     fn drop(&mut self) {
-        self.reader_thread_keep_reading
-            .store(false, Ordering::Release);
+        self.keep_reading.store(false, Ordering::Release);
         // TODO: handle error from closure? log errors?
         self.reader_thread.take().unwrap().join().unwrap().unwrap();
     }
