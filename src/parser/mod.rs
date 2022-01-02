@@ -164,10 +164,10 @@ impl Transformer for SplineTransformer {
 #[macro_export]
 macro_rules! parse_error {
     ($span:expr, $msg:expr) => {
-        return Err(ParseError::new($msg, $span).into());
+        return Err(ParseError::new($msg, $span).into())
     };
     ($span:expr, $fmt:expr, $($arg:expr),+) => {
-        return Err(ParseError::new(format!($fmt, $($arg),+), $span).into());
+        return Err(ParseError::new(format!($fmt, $($arg),+), $span).into())
     };
 }
 
