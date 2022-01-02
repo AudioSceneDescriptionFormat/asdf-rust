@@ -85,9 +85,9 @@ impl AsdfSourceInfo {
 impl Drop for AsdfSourceInfo {
     fn drop(&mut self) {
         unsafe {
-            CString::from_raw(self.id as *mut _);
-            CString::from_raw(self.name as *mut _);
-            CString::from_raw(self.model as *mut _);
+            let _ = CString::from_raw(self.id as *mut _);
+            let _ = CString::from_raw(self.name as *mut _);
+            let _ = CString::from_raw(self.model as *mut _);
         }
     }
 }

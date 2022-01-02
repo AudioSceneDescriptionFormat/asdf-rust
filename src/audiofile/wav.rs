@@ -84,7 +84,7 @@ where
 
     fn fill_block(
         &self,
-        mut reader: &mut hound::WavReader<R>,
+        reader: &mut hound::WavReader<R>,
         block: &mut Block,
         max_frames: u32,
     ) -> hound::Result<()> {
@@ -93,7 +93,7 @@ where
         let mut frame = 0;
         'outer: while frame < max_frames {
             for channel in block.channels.iter_mut() {
-                if let Some(sample) = self.next_sample(&mut reader) {
+                if let Some(sample) = self.next_sample(reader) {
                     channel.data[frame as usize] = sample?;
                 } else {
                     // This should only ever happen in the first channel, but we don't check this!
