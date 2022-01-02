@@ -19,12 +19,32 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+
+      - name: Cache Cargo-installed binaries
+        uses: actions/cache@v2
+        id: cache-cargo
+        with:
+          path: ~/cargo-bin
+          # Increment to force re-installation:
+          key: ${{ runner.os }}-cache01
+      - name: Install cargo-c
+        if: steps.cache-cargo.outputs.cache-hit != 'true'
+        run: |
+          cargo install cargo-c
+          mkdir -p ~/cargo-bin
+          cp ~/.cargo/bin/cargo-capi ~/cargo-bin
+          cp ~/.cargo/bin/cargo-cbuild ~/cargo-bin
+          cp ~/.cargo/bin/cargo-cinstall ~/cargo-bin
+          cp ~/.cargo/bin/cargo-ctest ~/cargo-bin
+      - name: Add cache directory to path
+        run: |
+          echo "$HOME/cargo-bin" >> $GITHUB_PATH
+
       - name: Run tests
         run: |
           cargo test --workspace --all-features
       - name: Install C API
         run: |
-          cargo install cargo-c
           cargo cinstall --verbose --release --destdir=temp
           sudo cp -r temp/usr/local/* /usr/local/
       - name: Update linker path
@@ -61,12 +81,32 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+
+      - name: Cache Cargo-installed binaries
+        uses: actions/cache@v2
+        id: cache-cargo
+        with:
+          path: ~/cargo-bin
+          # Increment to force re-installation:
+          key: ${{ runner.os }}-cache01
+      - name: Install cargo-c
+        if: steps.cache-cargo.outputs.cache-hit != 'true'
+        run: |
+          cargo install cargo-c
+          mkdir -p ~/cargo-bin
+          cp ~/.cargo/bin/cargo-capi ~/cargo-bin
+          cp ~/.cargo/bin/cargo-cbuild ~/cargo-bin
+          cp ~/.cargo/bin/cargo-cinstall ~/cargo-bin
+          cp ~/.cargo/bin/cargo-ctest ~/cargo-bin
+      - name: Add cache directory to path
+        run: |
+          echo "$HOME/cargo-bin" >> $GITHUB_PATH
+
       - name: Run tests
         run: |
           cargo test --workspace --all-features
       - name: Install C API
         run: |
-          cargo install cargo-c
           cargo cinstall --verbose --release
       - name: Install Pure Data
         run: |
@@ -151,12 +191,32 @@ jobs:
           profile: minimal
           toolchain: stable-msvc
           override: true
+
+      - name: Cache Cargo-installed binaries
+        uses: actions/cache@v2
+        id: cache-cargo
+        with:
+          path: ~/cargo-bin
+          # Increment to force re-installation:
+          key: ${{ runner.os }}-cache01
+      - name: Install cargo-c
+        if: steps.cache-cargo.outputs.cache-hit != 'true'
+        run: |
+          cargo install cargo-c
+          mkdir -p ~/cargo-bin
+          cp ~/.cargo/bin/cargo-capi.exe ~/cargo-bin
+          cp ~/.cargo/bin/cargo-cbuild.exe ~/cargo-bin
+          cp ~/.cargo/bin/cargo-cinstall.exe ~/cargo-bin
+          cp ~/.cargo/bin/cargo-ctest.exe ~/cargo-bin
+      - name: Add cache directory to path
+        run: |
+          echo "$HOME\cargo-bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Run tests
         run: |
           cargo test --workspace --all-features
-      - name: Build and install C API
+      - name: Install C API
         run: |
-          cargo install cargo-c
           cargo cinstall --verbose --release
 
   deken-package:
