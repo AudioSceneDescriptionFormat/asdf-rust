@@ -55,7 +55,7 @@ impl ParseError {
                 .map(|(idx, _)| line_start + idx + 1)
                 .unwrap_or(context_end);
             // NB: Tabs are not shown properly, but at least the markers are at correct positions:
-            context.push_str(&source[line_start..line_end].replace("\t", " "));
+            context.push_str(&source[line_start..line_end].replace('\t', " "));
 
             // NB: The marker position doesn't consider Unicode combining characters nor fullwidth
             //     characters, but that would probably be overkill here ...
