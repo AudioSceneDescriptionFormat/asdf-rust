@@ -36,7 +36,7 @@ void *asdf_tilde_new(t_floatarg f)
   float arg = f;
   x->signal_outlets = f;
   if (arg < 0.0 || arg != x->signal_outlets) {
-    error("asdf~: argument has to be a non-negative integer");
+    pd_error(NULL, "asdf~: argument has to be a non-negative integer");
     return NULL;
   }
   x->x_canvas = canvas_getcurrent();
