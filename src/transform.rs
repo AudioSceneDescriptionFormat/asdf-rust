@@ -5,8 +5,8 @@ use xmlparser as xml;
 use crate::parser::error::ParseError;
 use crate::parser::Attributes;
 
-pub type Vec3 = nalgebra::Vector3<f32>;
-pub type Quat = nalgebra::UnitQuaternion<f32>;
+pub type Vec3 = asdfspline::quaternion::nalgebra::Vector3<f32>;
+pub type Quat = asdfspline::quaternion::UnitQuaternion;
 
 #[derive(Clone, Default, Debug)]
 pub struct Transform {
