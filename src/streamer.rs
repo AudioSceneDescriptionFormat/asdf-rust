@@ -38,12 +38,9 @@ impl<'a> Iterator for ActiveIter<'a> {
     type Item = &'a mut PlaylistEntry;
 
     fn next(&mut self) -> Option<&'a mut PlaylistEntry> {
-        for entry in &mut self.inner {
-            if entry.begin < self.block_end && self.block_start < (entry.begin + entry.duration) {
-                return Some(entry);
-            }
-        }
-        None
+        self.inner.find(|entry| {
+            entry.begin < self.block_end && self.block_start < (entry.begin + entry.duration)
+        })
     }
 }
 
