@@ -273,3 +273,21 @@ jobs:
       - name: Build docs
         run: |
           cargo rustdoc --all-features -- -D warnings
+
+  msrv:
+    strategy:
+      matrix:
+        rust-version: ["1.61.0"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone Git repository
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Install Rust version ${{ matrix.rust-version }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust-version }}
+      - name: Check whether it compiles
+        run: |
+          cargo check --all-features --verbose
