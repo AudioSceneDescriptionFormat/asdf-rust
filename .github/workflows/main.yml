@@ -270,6 +270,6 @@ jobs:
       - name: clippy
         run: |
           cargo clippy --all-targets --all-features -- -D warnings
-      - name: docs
+      - name: Build docs
         run: |
-          cargo doc --verbose --workspace --all-features
+          cargo rustdoc --all-features -- -D warnings
