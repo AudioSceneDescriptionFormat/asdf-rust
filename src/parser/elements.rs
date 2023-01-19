@@ -649,7 +649,7 @@ impl<'a> Element<'a> for ClipElement {
                         file_channels
                     );
                 }
-                Ok(Box::new(ChannelElement::default()))
+                Ok(Box::<ChannelElement>::default())
             } else {
                 parse_error!(
                     name,
@@ -891,7 +891,7 @@ impl<'a> Element<'a> for TransformElement {
         _parent_span: xml::StrSpan<'_>,
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         if name.as_str() == "o" {
-            Ok(Box::new(TransformNodeElement::default()))
+            Ok(Box::<TransformNodeElement>::default())
         } else {
             parse_error!(
                 name,

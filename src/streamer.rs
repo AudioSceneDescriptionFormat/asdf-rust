@@ -58,7 +58,7 @@ impl FileStreamer {
         let (seek_producer, mut seek_consumer) =
             rtrb::RingBuffer::<(u64, rtrb::Consumer<f32>)>::new(1);
         let (mut data_producer, data_consumer) =
-            rtrb::RingBuffer::new(buffer_blocks as usize * chunksize as usize);
+            rtrb::RingBuffer::new(buffer_blocks as usize * chunksize);
 
         let keep_reading = Arc::new(AtomicBool::new(true));
         let reader_thread = {
