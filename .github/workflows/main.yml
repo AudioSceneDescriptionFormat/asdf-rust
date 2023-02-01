@@ -43,7 +43,7 @@ jobs:
           cargo test --workspace --all-features
       - name: Install C API
         run: |
-          cargo cinstall --verbose --release --destdir=temp
+          cargo cinstall --verbose --destdir=temp
           sudo cp -r temp/usr/local/* /usr/local/
       - name: Update linker path
         run: |
@@ -103,7 +103,7 @@ jobs:
           cargo test --workspace --all-features
       - name: Install C API
         run: |
-          cargo cinstall --verbose --release
+          cargo cinstall --verbose
       - name: Install Pure Data
         run: |
           brew install --cask pd
@@ -150,7 +150,7 @@ jobs:
           cargo test --workspace --all-features
       - name: Install ASDF
         run: |
-          cargo cinstall --verbose --release --prefix=/mingw64
+          cargo cinstall --verbose --prefix=/mingw64
       - name: Install Pure Data
         run: |
           wget -q -O Pd.zip http://msp.ucsd.edu/Software/pd-0.51-3.msw.zip
@@ -211,7 +211,7 @@ jobs:
           cargo test --workspace --all-features
       - name: Install C API
         run: |
-          cargo cinstall --verbose --release
+          cargo cinstall --verbose
 
   deken-package:
     # The deken package seems to be missing on 22.04:

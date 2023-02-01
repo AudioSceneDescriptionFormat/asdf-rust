@@ -41,7 +41,7 @@ If you forget the `--recursive` flag, you can get the submodule later with:
 
 Build and install the `asdf` library:
 
-    cargo cinstall --release
+    cargo cinstall
 
 This will install the library somewhere within the `/usr/local` directory.
 If your user account doesn't have the rights for writing in this directory,
@@ -51,7 +51,7 @@ using `sudo adduser myuser staff` [Note: log out and log in again might be neede
 or you can install the library to a temporary directory and
 afterwards copy it to its final destination using `sudo`:
 
-    cargo cinstall --release --destdir=temp
+    cargo cinstall --destdir=temp
     sudo cp -r temp/usr/local/* /usr/local/
 
 If you don't want to install to `/usr/local`, you can use the `--prefix` option.
