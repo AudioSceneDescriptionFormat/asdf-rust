@@ -105,7 +105,7 @@ pub fn parse_transform(attributes: &mut Attributes<'_>) -> Result<Option<Transfo
 pub fn parse_pos(value: xml::StrSpan<'_>) -> Result<Vec3, ParseError> {
     let mut values = value.as_str().split_whitespace().map(|s| {
         f32::from_str(s)
-            .map_err(|e| ParseError::new(format!("error parsing \"pos\" value(s): {}", e), value))
+            .map_err(|e| ParseError::new(format!("error parsing \"pos\" value(s): {e}"), value))
     });
     let x = values.next().unwrap_or_else(|| {
         Err(ParseError::new(
@@ -132,7 +132,7 @@ pub fn parse_pos(value: xml::StrSpan<'_>) -> Result<Vec3, ParseError> {
 pub fn parse_rot(value: xml::StrSpan<'_>) -> Result<Quat, ParseError> {
     let mut values = value.as_str().split_whitespace().map(|s| {
         f32::from_str(s)
-            .map_err(|e| ParseError::new(format!("error parsing \"rot\" value(s): {}", e), value))
+            .map_err(|e| ParseError::new(format!("error parsing \"rot\" value(s): {e}"), value))
     });
     let azimuth = values.next().unwrap_or_else(|| {
         Err(ParseError::new(

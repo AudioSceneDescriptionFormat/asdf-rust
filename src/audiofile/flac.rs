@@ -111,7 +111,7 @@ where
     assert!(!client_data.is_null());
     let client_data = &mut *(client_data as *mut ClientData<R>);
     // NB: unstable has stream_position() with feature(seek_convenience)
-    match client_data.reader.seek(io::SeekFrom::Current(0)) {
+    match client_data.reader.stream_position() {
         Ok(position) => {
             *absolute_byte_offset = position;
             ffi::FLAC__STREAM_DECODER_TELL_STATUS_OK
@@ -135,8 +135,7 @@ where
     let client_data = &mut *(client_data as *mut ClientData<R>);
     // NB: unstable has stream_len() with feature(seek_convenience)
     match client_data
-        .reader
-        .seek(io::SeekFrom::Current(0))
+        .reader.stream_position()
         .and_then(|current| {
             client_data
                 .reader
@@ -161,8 +160,7 @@ where
     assert!(!client_data.is_null());
     let client_data = &mut *(client_data as *mut ClientData<R>);
     let is_eof = client_data
-        .reader
-        .seek(io::SeekFrom::Current(0))
+        .reader.stream_position()
         .and_then(|current| {
             client_data
                 .reader

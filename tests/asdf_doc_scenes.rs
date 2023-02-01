@@ -21,7 +21,7 @@ fn load_scenes() -> Result<(), BoxedError> {
         let file = entry?.path();
         if let Some(ext) = file.extension() {
             if ext == "asd" {
-                println!("Checking {:?}", file);
+                println!("Checking {file:?}");
                 let _scene = Scene::new(file, samplerate, blocksize, buffer_blocks, sleeptime)?;
 
                 // TODO: get more information from the file?
@@ -46,7 +46,7 @@ impl std::fmt::Debug for BoxedError {
         write!(fmt, "{}", self.0).unwrap();
         let sources = std::iter::successors(self.0.source(), |&e| e.source());
         for s in sources {
-            write!(fmt, "\nerror details: {}", s).unwrap();
+            write!(fmt, "\nerror details: {s}").unwrap();
         }
         Ok(())
     }

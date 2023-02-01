@@ -77,7 +77,7 @@ where
         libc::SEEK_SET => reader.seek(io::SeekFrom::Start(offset as u64)),
         libc::SEEK_CUR => reader.seek(io::SeekFrom::Current(offset)),
         libc::SEEK_END => reader.seek(io::SeekFrom::End(offset)),
-        w => panic!("Invalid value for \"whence\": {}", w),
+        w => panic!("Invalid value for \"whence\": {w}"),
     };
     result.map(|v| v as c_int).unwrap_or(-1)
 }
@@ -88,8 +88,7 @@ where
 {
     assert!(!datasource.is_null());
     let reader = unsafe { &mut *(datasource as *mut R) };
-    reader
-        .seek(io::SeekFrom::Current(0))
+    reader.stream_position()
         .map(|v| v as c_long)
         .unwrap_or(-1)
 }
@@ -122,7 +121,7 @@ impl fmt::Display for LibVorbisError {
                 }
                 OV_EBADLINK => "Invalid stream section, or the requested link is corrupt",
                 OV_ENOSEEK => "Bitstream is not seekable",
-                e => panic!("Unknown Vorbis error code: {}", e),
+                e => panic!("Unknown Vorbis error code: {e}"),
             }
         )
     }

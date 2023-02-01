@@ -134,7 +134,7 @@ pub unsafe extern "C" fn asdf_scene_new(
     let filename = CStr::from_ptr(filename)
         .to_str()
         .map_err(|e| {
-            set_error_string(format!("Invalid filename: {}", e));
+            set_error_string(format!("Invalid filename: {e}"));
         })
         .ok()?;
     let inner = Scene::new(
@@ -298,10 +298,10 @@ fn set_error_string(error: impl Display) {
 
 fn set_error(error: &dyn std::error::Error) {
     let mut msg = String::new();
-    write!(&mut msg, "{}", error).unwrap();
+    write!(&mut msg, "{error}").unwrap();
     let sources = std::iter::successors(error.source(), |e| e.source());
     for s in sources {
-        write!(&mut msg, "\nerror details: {}", s).unwrap();
+        write!(&mut msg, "\nerror details: {s}").unwrap();
     }
     set_error_string(msg);
 }
