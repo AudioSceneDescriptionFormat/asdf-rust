@@ -134,17 +134,15 @@ where
     assert!(!client_data.is_null());
     let client_data = &mut *(client_data as *mut ClientData<R>);
     // NB: unstable has stream_len() with feature(seek_convenience)
-    match client_data
-        .reader.stream_position()
-        .and_then(|current| {
-            client_data
-                .reader
-                .seek(io::SeekFrom::End(0))
-                .and_then(|length| {
-                    *stream_length = length;
-                    client_data.reader.seek(io::SeekFrom::Start(current))
-                })
-        }) {
+    match client_data.reader.stream_position().and_then(|current| {
+        client_data
+            .reader
+            .seek(io::SeekFrom::End(0))
+            .and_then(|length| {
+                *stream_length = length;
+                client_data.reader.seek(io::SeekFrom::Start(current))
+            })
+    }) {
         Ok(_) => ffi::FLAC__STREAM_DECODER_LENGTH_STATUS_OK,
         Err(_) => ffi::FLAC__STREAM_DECODER_LENGTH_STATUS_ERROR,
     }
@@ -160,7 +158,8 @@ where
     assert!(!client_data.is_null());
     let client_data = &mut *(client_data as *mut ClientData<R>);
     let is_eof = client_data
-        .reader.stream_position()
+        .reader
+        .stream_position()
         .and_then(|current| {
             client_data
                 .reader

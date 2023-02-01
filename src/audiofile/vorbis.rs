@@ -88,9 +88,7 @@ where
 {
     assert!(!datasource.is_null());
     let reader = unsafe { &mut *(datasource as *mut R) };
-    reader.stream_position()
-        .map(|v| v as c_long)
-        .unwrap_or(-1)
+    reader.stream_position().map(|v| v as c_long).unwrap_or(-1)
 }
 
 extern "C" fn close_func(_datasource: *mut c_void) -> c_int {
