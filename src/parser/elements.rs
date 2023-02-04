@@ -825,6 +825,9 @@ struct TransformElement {
     parent_duration: Option<Seconds>,
     targets: Vec<String>,
     transform: Option<Transform>,
+    global_tension: Option<f32>,
+    global_continuity: Option<f32>,
+    global_bias: Option<f32>,
     nodes: Vec<TransformNodeElement>,
     iterations: Iterations,
 }
@@ -859,6 +862,16 @@ impl<'a> Element<'a> for TransformElement {
             parse_error!(span, "Attribute \"apply-to\" is required in <transform>");
         }
         self.transform = parse_transform(attributes)?;
+
+        if let Some((_key, value)) = attributes.get_item("tension") {
+            self.global_tension = Some(parse_attribute(value)?);
+        }
+        if let Some((_key, value)) = attributes.get_item("continuity") {
+            self.global_continuity = Some(parse_attribute(value)?);
+        }
+        if let Some((_key, value)) = attributes.get_item("bias") {
+            self.global_bias = Some(parse_attribute(value)?);
+        }
 
         if let Some(repeat_value) = attributes.get_value("repeat") {
             self.iterations = parse_attribute(repeat_value)?;
@@ -1050,9 +1063,11 @@ impl<'a> Element<'a> for TransformElement {
                 }
 
                 let tcb = [
-                    node.tension.unwrap_or_default(),
-                    node.continuity.unwrap_or_default(),
-                    node.bias.unwrap_or_default(),
+                    node.tension.or(self.global_tension).unwrap_or_default(),
+                    node.continuity
+                        .or(self.global_continuity)
+                        .unwrap_or_default(),
+                    node.bias.or(self.global_bias).unwrap_or_default(),
                 ];
 
                 if node.closed_pos {
