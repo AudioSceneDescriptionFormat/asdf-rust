@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use asdfspline::quaternion::angles2quat;
 use xmlparser as xml;
 
 use crate::parser::error::ParseError;
@@ -148,14 +149,7 @@ pub fn parse_rot(value: xml::StrSpan<'_>) -> Result<Quat, ParseError> {
             value,
         ));
     }
-
-    fn radians(deg: f32) -> f32 {
-        deg * std::f32::consts::PI / 180.0
-    }
-
-    Ok(Quat::from_axis_angle(&Vec3::z_axis(), radians(azimuth))
-        * Quat::from_axis_angle(&Vec3::x_axis(), radians(elevation))
-        * Quat::from_axis_angle(&Vec3::y_axis(), radians(roll)))
+    Ok(angles2quat(azimuth, elevation, roll))
 }
 
 pub fn parse_vol(value: xml::StrSpan<'_>) -> Result<f32, ParseError> {
