@@ -974,6 +974,9 @@ impl<'a> Element<'a> for TransformElement {
                 let total_duration = frames2seconds(duration_frames, scene.samplerate);
                 transform_duration = total_duration / self.iterations;
                 total_frames = Some(duration_frames);
+            } else if let Some(parent_duration) = self.parent_duration {
+                // TODO: check if this makes sense for <seq>!
+                transform_duration = parent_duration / self.iterations;
             } else {
                 parse_error!(span, "Unable to infer <transform> duration")
             }
@@ -1007,6 +1010,9 @@ impl<'a> Element<'a> for TransformElement {
                 let total_duration = frames2seconds(duration_frames, scene.samplerate);
                 transform_duration = total_duration / self.iterations;
                 total_frames = Some(duration_frames);
+            } else if let Some(parent_duration) = self.parent_duration {
+                // TODO: check if this makes sense for <seq>!
+                transform_duration = parent_duration / self.iterations;
             } else {
                 parse_error!(span, "Unable to infer time of last node");
             }
