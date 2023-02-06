@@ -514,7 +514,7 @@ impl<'a> Element<'a> for ParElement {
     ) -> Result<Box<dyn Element<'a>>, ParseError> {
         let parent_duration = self
             .duration_frames
-            .map(|f| Seconds(f as f32 / self.samplerate as f32))
+            .map(|f| frames2seconds(f, self.samplerate))
             .or_else(|| self.parent_duration.map(|d| d / self.iterations));
         child_in_container(name, parent_span, parent_duration)
     }
@@ -1558,7 +1558,7 @@ fn parent_duration_frames(
         par.duration_frames
     } else if let Some(seq) = parent_any.downcast_ref::<SeqElement>() {
         if let Some(parent_duration) = seq.parent_duration.map(|d| d / seq.iterations) {
-            let duration_frames = (parent_duration.0 * scene.samplerate as f32) as u64;
+            let duration_frames = seconds2frames(parent_duration, scene.samplerate);
             Some(duration_frames.saturating_sub(seq.end))
         } else {
             None
