@@ -924,19 +924,7 @@ impl<'a> Element<'a> for TransformElement {
 
         let parent = parent.unwrap();
 
-        let parent_any = (**parent).as_any();
-        let max_frames = if let Some(par) = parent_any.downcast_ref::<ParElement>() {
-            par.duration_frames
-        } else if let Some(seq) = parent_any.downcast_ref::<SeqElement>() {
-            if let Some(parent_duration) = seq.parent_duration.map(|d| d / seq.iterations) {
-                let duration_frames = (parent_duration.0 * scene.samplerate as f32) as u64;
-                Some(duration_frames.saturating_sub(seq.end))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let max_frames = parent_duration_frames(parent, scene);
 
         if self.nodes.is_empty() {
             self.nodes.push(TransformNodeElement {
@@ -1558,6 +1546,25 @@ fn child_in_container<'a>(
             name.as_str(),
             parent_span.as_str()
         ),
+    }
+}
+
+fn parent_duration_frames(
+    parent: &mut Box<dyn Element<'_>>,
+    scene: &mut SceneInitializer,
+) -> Option<u64> {
+    let parent_any = (**parent).as_any();
+    if let Some(par) = parent_any.downcast_ref::<ParElement>() {
+        par.duration_frames
+    } else if let Some(seq) = parent_any.downcast_ref::<SeqElement>() {
+        if let Some(parent_duration) = seq.parent_duration.map(|d| d / seq.iterations) {
+            let duration_frames = (parent_duration.0 * scene.samplerate as f32) as u64;
+            Some(duration_frames.saturating_sub(seq.end))
+        } else {
+            None
+        }
+    } else {
+        None
     }
 }
 
