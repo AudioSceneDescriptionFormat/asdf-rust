@@ -9,7 +9,7 @@ use xmlparser as xml;
 
 use crate::audiofile::dynamic::{load_audio_file, AudioFile};
 use crate::streamer::FileStreamer;
-use crate::transform::{parse_pos, parse_rot, parse_transform, parse_vol, Transform, Vec3};
+use crate::transform::{parse_pos, parse_rot, parse_transform, parse_vol, Quat, Transform, Vec3};
 use crate::{Source, Transformer, REFERENCE_ID};
 
 use super::error::ParseError;
@@ -1018,8 +1018,8 @@ impl<'a> Element<'a> for TransformElement {
             }
 
             let mut positions = Vec::<Vec3>::new();
-            let mut rotations = Vec::new();
-            let mut volumes = Vec::new();
+            let mut rotations = Vec::<Quat>::new();
+            let mut volumes = Vec::<f32>::new();
             let mut times_pos = Vec::<Option<f32>>::new();
             let mut times_rot = Vec::<Option<f32>>::new();
             let mut times_vol = Vec::<Option<f32>>::new();
@@ -1215,6 +1215,10 @@ impl<'a> Element<'a> for TransformElement {
             };
 
             for (rot_idx, pos_idx) in rot_time_from_pos {
+                // Begin and end time have been set above.
+                if rot_idx == 0 || rot_idx == times_rot.len() - 1 {
+                    continue;
+                }
                 assert!(times_rot[rot_idx].is_none());
                 times_rot[rot_idx] = Some(pos_spline.as_ref().unwrap().grid()[pos_idx]);
             }
@@ -1244,10 +1248,18 @@ impl<'a> Element<'a> for TransformElement {
             };
 
             for (vol_idx, pos_idx) in vol_time_from_pos {
+                // Begin and end time have been set above.
+                if vol_idx == 0 || vol_idx == times_vol.len() - 1 {
+                    continue;
+                }
                 assert!(times_vol[vol_idx].is_none());
                 times_vol[vol_idx] = Some(pos_spline.as_ref().unwrap().grid()[pos_idx]);
             }
             for (vol_idx, rot_idx) in vol_time_from_rot {
+                // Begin and end time have been set above.
+                if vol_idx == 0 || vol_idx == times_vol.len() - 1 {
+                    continue;
+                }
                 assert!(times_vol[vol_idx].is_none());
                 times_vol[vol_idx] = Some(rot_spline.as_ref().unwrap().grid()[rot_idx]);
             }
