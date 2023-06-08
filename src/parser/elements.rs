@@ -624,7 +624,7 @@ impl<'a> Element<'a> for ClipElement {
 
             self.file = Some(
                 load_audio_file(path, scene.samplerate, iterations).map_err(|e| {
-                    ParseError::from_source(e, "error loading audio file", file_value)
+                    ParseError::from_source(e, "Error loading audio file", file_value)
                 })?,
             );
         } else {
@@ -699,7 +699,7 @@ impl<'a> Element<'a> for ClipElement {
                 if self.channel_map.len() >= file_channels as usize {
                     parse_error!(
                         span,
-                        "Too many <channel> elements (file has only {} channels)",
+                        "Too many <channel> elements: file has only {} channel(s)",
                         file_channels
                     );
                 }
@@ -1604,7 +1604,7 @@ impl ParseAttribute for Iterations {
     fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         NonZeroU64::from_str(span.as_str())
             .map_err(|e| {
-                ParseError::from_source(e, "error parsing attribute as positive integer", span)
+                ParseError::from_source(e, "Error parsing attribute as positive integer", span)
             })
             .map(Iterations)
     }
@@ -1613,7 +1613,7 @@ impl ParseAttribute for Iterations {
 impl ParseAttribute for u32 {
     fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         u32::from_str(span.as_str()).map_err(|e| {
-            ParseError::from_source(e, "error parsing attribute as non-negative integer", span)
+            ParseError::from_source(e, "Error parsing attribute as non-negative integer", span)
         })
     }
 }
@@ -1621,7 +1621,7 @@ impl ParseAttribute for u32 {
 impl ParseAttribute for f32 {
     fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         f32::from_str(span.as_str()).map_err(|e| {
-            ParseError::from_source(e, "error parsing attribute as decimal value(s)", span)
+            ParseError::from_source(e, "Error parsing attribute as decimal value(s)", span)
         })
     }
 }
@@ -1629,6 +1629,6 @@ impl ParseAttribute for f32 {
 impl ParseAttribute for XmlTime {
     fn parse_attribute(span: xml::StrSpan<'_>) -> Result<Self, ParseError> {
         XmlTime::from_str(span.as_str())
-            .map_err(|e| ParseError::from_source(e, "invalid time value", span))
+            .map_err(|e| ParseError::from_source(e, "Invalid time value", span))
     }
 }
