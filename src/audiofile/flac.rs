@@ -49,7 +49,6 @@ unsafe extern "C" fn read_callback<R>(
 where
     R: Read,
 {
-    let buffer = buffer as *mut u8;
     assert!(!client_data.is_null());
     let client_data = &mut *(client_data as *mut ClientData<R>);
     assert!(!bytes.is_null());
