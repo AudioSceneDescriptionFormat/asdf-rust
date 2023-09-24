@@ -1301,7 +1301,7 @@ impl<'a> Element<'a> for TransformElement {
                     );
                 }
                 Some(
-                    PiecewiseCubicCurve::new_shape_preserving(
+                    PiecewiseCubicCurve::new_piecewise_monotone(
                         volumes,
                         times_vol.into_iter().collect::<Option<Vec<f32>>>().unwrap(),
                         closed_vol,
