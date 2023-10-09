@@ -50,14 +50,14 @@ where
     R: Read,
 {
     assert!(!client_data.is_null());
-    let client_data = &mut *(client_data as *mut ClientData<R>);
+    let client_data = unsafe { &mut *(client_data as *mut ClientData<R>) };
     assert!(!bytes.is_null());
-    let size = *bytes;
-    let buffer = std::slice::from_raw_parts_mut(buffer, size);
+    let size = unsafe { *bytes };
+    let buffer = unsafe { std::slice::from_raw_parts_mut(buffer, size) };
     loop {
         match client_data.reader.read(buffer) {
             Ok(read_bytes) => {
-                *bytes = read_bytes;
+                unsafe { *bytes = read_bytes };
                 if read_bytes == 0 {
                     assert!(size != 0);
                     return ffi::FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM;
@@ -83,7 +83,7 @@ where
     R: Seek,
 {
     assert!(!client_data.is_null());
-    let client_data = &mut *(client_data as *mut ClientData<R>);
+    let client_data = unsafe { &mut *(client_data as *mut ClientData<R>) };
     match client_data
         .reader
         .seek(io::SeekFrom::Start(absolute_byte_offset))
@@ -108,11 +108,11 @@ where
     R: Seek,
 {
     assert!(!client_data.is_null());
-    let client_data = &mut *(client_data as *mut ClientData<R>);
+    let client_data = unsafe { &mut *(client_data as *mut ClientData<R>) };
     // NB: unstable has stream_position() with feature(seek_convenience)
     match client_data.reader.stream_position() {
         Ok(position) => {
-            *absolute_byte_offset = position;
+            unsafe { *absolute_byte_offset = position };
             ffi::FLAC__STREAM_DECODER_TELL_STATUS_OK
         }
         Err(_) => {
@@ -131,14 +131,14 @@ where
     R: Seek,
 {
     assert!(!client_data.is_null());
-    let client_data = &mut *(client_data as *mut ClientData<R>);
+    let client_data = unsafe { &mut *(client_data as *mut ClientData<R>) };
     // NB: unstable has stream_len() with feature(seek_convenience)
     match client_data.reader.stream_position().and_then(|current| {
         client_data
             .reader
             .seek(io::SeekFrom::End(0))
             .and_then(|length| {
-                *stream_length = length;
+                unsafe { *stream_length = length };
                 client_data.reader.seek(io::SeekFrom::Start(current))
             })
     }) {
@@ -155,7 +155,7 @@ where
     R: Seek,
 {
     assert!(!client_data.is_null());
-    let client_data = &mut *(client_data as *mut ClientData<R>);
+    let client_data = unsafe { &mut *(client_data as *mut ClientData<R>) };
     let is_eof = client_data
         .reader
         .stream_position()
@@ -184,7 +184,7 @@ unsafe extern "C" fn error_callback<R>(
     client_data: *mut c_void,
 ) {
     assert!(!client_data.is_null());
-    let client_data = &mut *(client_data as *mut ClientData<R>);
+    let client_data = unsafe { &mut *(client_data as *mut ClientData<R>) };
     client_data.last_error_status = Some(status);
 }
 
@@ -198,9 +198,9 @@ where
     R: Seek,
 {
     assert!(!frame.is_null());
-    let frame = &*frame;
+    let frame = unsafe { &*frame };
     assert!(!client_data.is_null());
-    let client_data = &mut *(client_data as *mut ClientData<R>);
+    let client_data = unsafe { &mut *(client_data as *mut ClientData<R>) };
     client_data.buffer = buffer;
     client_data.blocksize = frame.header.blocksize;
     client_data.samplerate = frame.header.sample_rate;
@@ -216,13 +216,14 @@ unsafe extern "C" fn metadata_callback<R>(
     client_data: *mut c_void,
 ) {
     assert!(!metadata.is_null());
-    let metadata = &*metadata;
+    let metadata = unsafe { &*metadata };
     assert!(!client_data.is_null());
-    let client_data = &mut *(client_data as *mut ClientData<R>);
+    let client_data = unsafe { &mut *(client_data as *mut ClientData<R>) };
 
     if metadata.type_ == ffi::FLAC__METADATA_TYPE_STREAMINFO {
-        client_data.samplerate = metadata.data.stream_info.sample_rate;
-        client_data.channels = metadata.data.stream_info.channels;
+        let stream_info = unsafe { metadata.data.stream_info };
+        client_data.samplerate = stream_info.sample_rate;
+        client_data.channels = stream_info.channels;
     }
 }
 

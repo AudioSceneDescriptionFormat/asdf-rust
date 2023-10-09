@@ -2,6 +2,8 @@
 //!
 //! [ASDF]: https://AudioSceneDescriptionFormat.readthedocs.io/
 
+#![deny(unsafe_op_in_unsafe_fn)]
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;

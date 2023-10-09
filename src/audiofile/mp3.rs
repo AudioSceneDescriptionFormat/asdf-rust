@@ -34,8 +34,10 @@ where
 {
     let buf = buf as *mut u8;
     assert!(!user_data.is_null());
-    let reader = &mut *(user_data as *mut R);
-    let buffer = std::slice::from_raw_parts_mut(buf, size);
+    // SAFETY: user_data must point to a valid R and must not be aliased.
+    let reader = unsafe { &mut *(user_data as *mut R) };
+    // SAFETY: buf must point to initialized memory of appropriate size.
+    let buffer = unsafe { std::slice::from_raw_parts_mut(buf, size) };
     loop {
         match reader.read(buffer) {
             Ok(bytes) => return bytes,
@@ -53,7 +55,8 @@ where
     R: Seek,
 {
     assert!(!user_data.is_null());
-    let reader = &mut *(user_data as *mut R);
+    // SAFETY: user_data must point to a valid R and must not be aliased.
+    let reader = unsafe { &mut *(user_data as *mut R) };
     let result = reader.seek(io::SeekFrom::Start(position));
     // NB: we have to return 0 on success
     result.map(|_| 0).unwrap_or(-1)

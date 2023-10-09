@@ -131,7 +131,9 @@ pub unsafe extern "C" fn asdf_scene_new(
     buffer_blocks: u32,
     usleeptime: u64,
 ) -> Option<Box<AsdfScene>> {
-    let filename = CStr::from_ptr(filename)
+    assert!(!filename.is_null());
+    // SAFETY: filename must be a valid C string.
+    let filename = unsafe { CStr::from_ptr(filename) }
         .to_str()
         .map_err(|e| {
             set_error_string(format!("Invalid filename: {e}"));
@@ -260,14 +262,16 @@ pub unsafe extern "C" fn asdf_get_audio_data(
     } else {
         std::ptr::NonNull::dangling().as_ptr()
     };
-    let pointers = std::slice::from_raw_parts(data, sources);
+    // SAFETY: if sources is not zero, data must point to enough pointers.
+    let pointers = unsafe { std::slice::from_raw_parts(data, sources) };
     let blocksize = scene.blocksize as usize;
 
     // This mutably borrows `scene.sos` and is therefore not re-entrant.
     let data = scene.sos.from_iter_mut(
         pointers
             .iter()
-            .map(|&ptr| std::slice::from_raw_parts_mut(ptr, blocksize)),
+            // SAFETY: all pointers must point to initialized memory of appropriate size
+            .map(|&ptr| unsafe { std::slice::from_raw_parts_mut(ptr, blocksize) }),
     );
     // This mutably borrows `scene.inner` and is therefore not re-entrant.
     scene.inner.get_audio_data(data, rolling).into()
