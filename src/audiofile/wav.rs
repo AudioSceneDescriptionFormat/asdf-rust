@@ -2,10 +2,7 @@ use std::io::{Read, Seek};
 
 use super::BoxedError;
 
-pub struct File<R>
-where
-    R: Read + Seek,
-{
+pub struct File<R> {
     reader: hound::WavReader<R>,
     // NB: No dynamic memory is allocated when using zero-sized types (which we do)
     block_reader: Box<dyn BlockReader<R>>,

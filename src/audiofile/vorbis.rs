@@ -10,10 +10,7 @@ use super::BoxedError;
 const EIO: errno::Errno = errno::Errno(5);
 
 /// https://xiph.org/vorbis/doc/vorbisfile/reference.html
-pub struct File<R>
-where
-    R: Read + Seek,
-{
+pub struct File<R> {
     // https://xiph.org/vorbis/doc/vorbisfile/OggVorbis_File.html
     ov_struct: vorbisfile_sys::OggVorbis_File,
     #[allow(dead_code)]
@@ -28,10 +25,7 @@ unsafe impl<R: Read + Seek + Send> Send for File<R> {}
 
 unsafe impl<R: Read + Seek + Sync> Sync for File<R> {}
 
-impl<R> Drop for File<R>
-where
-    R: Read + Seek,
-{
+impl<R> Drop for File<R> {
     fn drop(&mut self) {
         unsafe {
             // https://xiph.org/vorbis/doc/vorbisfile/ov_clear.html

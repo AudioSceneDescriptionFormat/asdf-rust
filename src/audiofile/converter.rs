@@ -12,10 +12,7 @@ pub use libsamplerate_sys::SRC_SINC_FASTEST;
 pub use libsamplerate_sys::SRC_SINC_MEDIUM_QUALITY;
 pub use libsamplerate_sys::SRC_ZERO_ORDER_HOLD;
 
-pub struct Converter<F>
-where
-    F: AudioFileBasics + AudioFileBlocks,
-{
+pub struct Converter<F> {
     file: F,
     state: *mut libsamplerate_sys::SRC_STATE,
     // http://www.mega-nerd.com/SRC/api_misc.html#SRC_DATA
@@ -108,10 +105,7 @@ impl fmt::Display for LibSamplerateError {
     }
 }
 
-impl<F> Drop for Converter<F>
-where
-    F: AudioFileBasics + AudioFileBlocks,
-{
+impl<F> Drop for Converter<F> {
     fn drop(&mut self) {
         unsafe {
             libsamplerate_sys::src_delete(self.state);
