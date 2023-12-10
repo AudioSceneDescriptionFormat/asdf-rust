@@ -243,11 +243,7 @@ impl Drop for FileStreamer {
 
 fn fill_with_zeros(target: &mut [&mut [f32]]) {
     for slice in target.iter_mut() {
-        // TODO: use slice::fill() once stabilized:
-        //slice.fill(0.0f32);
-        for elem in slice.iter_mut() {
-            *elem = 0.0f32;
-        }
+        slice.fill(0.0f32);
     }
 }
 
