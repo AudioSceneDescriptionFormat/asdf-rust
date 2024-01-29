@@ -257,22 +257,23 @@ pub unsafe extern "C" fn asdf_get_audio_data(
 ) -> AsdfStreamingResult {
     let sources = scene.inner.file_sources() as usize;
     // NB: C++ doesn't guarantee that std::vector::data() is non-null for an empty vector.
-    let data = if sources != 0 {
-        data
+    let pointers = if data.is_null() {
+        &[]
     } else {
-        std::ptr::NonNull::dangling().as_ptr()
+        // SAFETY: data must point to enough pointers.
+        unsafe { std::slice::from_raw_parts(data, sources) }
     };
-    // SAFETY: if sources is not zero, data must point to enough pointers.
-    let pointers = unsafe { std::slice::from_raw_parts(data, sources) };
     let blocksize = scene.blocksize as usize;
 
     // This mutably borrows `scene.sos` and is therefore not re-entrant.
-    let data = scene.sos.from_iter_mut(
-        pointers
-            .iter()
+    let data = scene.sos.from_iter_mut(pointers.iter().map(|&ptr| {
+        if ptr.is_null() {
+            &mut []
+        } else {
             // SAFETY: all pointers must point to initialized memory of appropriate size
-            .map(|&ptr| unsafe { std::slice::from_raw_parts_mut(ptr, blocksize) }),
-    );
+            unsafe { std::slice::from_raw_parts_mut(ptr, blocksize) }
+        }
+    }));
     // This mutably borrows `scene.inner` and is therefore not re-entrant.
     scene.inner.get_audio_data(data, rolling).into()
 }
