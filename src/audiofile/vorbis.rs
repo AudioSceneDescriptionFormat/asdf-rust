@@ -52,7 +52,7 @@ where
     loop {
         match reader.read(buffer) {
             Ok(bytes) => return bytes,
-            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
             Err(_) => {
                 errno::set_errno(EIO);
                 return 0;
