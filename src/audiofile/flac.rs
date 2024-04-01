@@ -53,6 +53,7 @@ where
     let client_data = unsafe { &mut *(client_data as *mut ClientData<R>) };
     assert!(!bytes.is_null());
     let size = unsafe { *bytes };
+    // SAFETY: We assume non-NULL pointer and size.
     let buffer = unsafe { std::slice::from_raw_parts_mut(buffer, size) };
     loop {
         match client_data.reader.read(buffer) {

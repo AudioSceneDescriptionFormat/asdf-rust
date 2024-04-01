@@ -37,6 +37,7 @@ where
     // SAFETY: user_data must point to a valid R and must not be aliased.
     let reader = unsafe { &mut *(user_data as *mut R) };
     // SAFETY: buf must point to initialized memory of appropriate size.
+    // We assume non-NULL pointer and size.
     let buffer = unsafe { std::slice::from_raw_parts_mut(buf, size) };
     loop {
         match reader.read(buffer) {

@@ -48,6 +48,7 @@ where
     let ptr = ptr as *mut u8;
     assert!(!datasource.is_null());
     let reader = unsafe { &mut *(datasource as *mut R) };
+    // SAFETY: We assume non-NULL pointer and size.
     let buffer = unsafe { std::slice::from_raw_parts_mut(ptr, size * nmemb) };
     loop {
         match reader.read(buffer) {
