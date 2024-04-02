@@ -6,11 +6,11 @@ use libc::{c_int, c_long};
 use super::{AudioFileBasics, AudioFileBlocks, BoxedError};
 
 // http://www.mega-nerd.com/SRC/api_misc.html#Converters
-pub use libsamplerate_sys::SRC_LINEAR;
+//pub use libsamplerate_sys::SRC_LINEAR;
 pub use libsamplerate_sys::SRC_SINC_BEST_QUALITY;
-pub use libsamplerate_sys::SRC_SINC_FASTEST;
-pub use libsamplerate_sys::SRC_SINC_MEDIUM_QUALITY;
-pub use libsamplerate_sys::SRC_ZERO_ORDER_HOLD;
+//pub use libsamplerate_sys::SRC_SINC_FASTEST;
+//pub use libsamplerate_sys::SRC_SINC_MEDIUM_QUALITY;
+//pub use libsamplerate_sys::SRC_ZERO_ORDER_HOLD;
 
 pub struct Converter<F> {
     file: F,
