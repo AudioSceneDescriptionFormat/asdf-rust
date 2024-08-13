@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: true
       - name: Install Rust
@@ -70,7 +70,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: true
       - name: Install Rust
@@ -143,7 +143,7 @@ jobs:
             mingw-w64-x86_64-cargo-c
             mingw-w64-x86_64-ntldd-git
       - name: Clone Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: true
       - name: Run tests
@@ -179,7 +179,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: true
       - name: Install Rust
@@ -220,7 +220,7 @@ jobs:
     needs: [Linux, macOS, Windows-MSYS2]
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Retrieve Linux external
         uses: actions/download-artifact@v4
         with:
@@ -258,7 +258,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: true
       - name: Install Rust
@@ -283,7 +283,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: true
       - name: Install Rust version ${{ matrix.rust-version }}
