@@ -222,17 +222,17 @@ jobs:
       - name: Clone Git repository
         uses: actions/checkout@v3
       - name: Retrieve Linux external
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: Linux Pd external
           path: asdf
       - name: Retrieve macOS external
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: macOS Pd external
           path: asdf
       - name: Retrieve Windows external
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: Windows Pd external
           path: asdf
