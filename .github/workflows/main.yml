@@ -103,7 +103,8 @@ jobs:
           cargo test --workspace --all-features
       - name: Install C API
         run: |
-          cargo cinstall --verbose
+          cargo cinstall --verbose --destdir=temp
+          sudo cp -r temp/usr/local/* /usr/local/
       - name: Install Pure Data
         run: |
           brew install --cask pd
