@@ -134,14 +134,16 @@ jobs:
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
         with:
+          msystem: ucrt64
           update: true
           install: >-
             make
             unzip
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-rust
-            mingw-w64-x86_64-cargo-c
-            mingw-w64-x86_64-ntldd-git
+          pacboy: >-
+            cmake:p
+            rust:p
+            cargo-c:p
+            ntldd-git:p
       - name: Clone Git repository
         uses: actions/checkout@v4
         with:
@@ -151,7 +153,7 @@ jobs:
           cargo test --workspace --all-features
       - name: Install ASDF
         run: |
-          cargo cinstall --verbose --prefix=/mingw64
+          cargo cinstall --verbose --prefix=${MINGW_PREFIX}
       - name: Install Pure Data
         run: |
           wget -q -O Pd.zip http://msp.ucsd.edu/Software/pd-0.51-3.msw.zip
