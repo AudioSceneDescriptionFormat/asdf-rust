@@ -136,11 +136,11 @@ where
     where
         R: Read,
     {
-        // TODO: off-by-one? use max_value - 1?
+        // TODO: off-by-one? use MAX - 1?
         reader
             .samples::<i16>()
             .next()
-            .map(|result| result.map(|sample| f32::from(sample) / f32::from(i16::max_value())))
+            .map(|result| result.map(|sample| f32::from(sample) / f32::from(i16::MAX)))
     }
 }
 
