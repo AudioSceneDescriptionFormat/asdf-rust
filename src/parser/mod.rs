@@ -364,7 +364,7 @@ trait GetAttributeValue {
     fn get_item(&mut self, name: &str) -> Option<(xml::StrSpan<'_>, xml::StrSpan<'_>)>;
 }
 
-impl<'a> GetAttributeValue for Attributes<'a> {
+impl GetAttributeValue for Attributes<'_> {
     fn get_value(&mut self, name: &str) -> Option<xml::StrSpan<'_>> {
         self.get_item(name).map(|(_, v)| v)
     }
