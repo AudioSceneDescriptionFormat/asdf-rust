@@ -4,6 +4,8 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   RUST_LOG: info
+  # https://github.com/Prior99/libsamplerate-sys/issues/21:
+  CMAKE_POLICY_VERSION_MINIMUM: 3.5
 jobs:
 
   Linux:
