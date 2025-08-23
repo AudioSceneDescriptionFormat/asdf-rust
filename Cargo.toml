@@ -17,18 +17,18 @@ subdirectory = false
 
 [dependencies]
 asdfspline = { path = "asdfspline" }
-rtrb = "0.2"
+rtrb = "0.3"
 rsor = "0.1"
-errno = "*"
+errno = "0.3"
 libflac-sys = "0.3"
-hound = "*"
-lazy_static = "1.3.0"
+hound = "3"
+lazy_static = "1"
 libc = "0.2"
-libsamplerate-sys = "*"
+libsamplerate-sys = "0.1"
 minimp3_ex-sys = { version = "0.1", features = ["float-output"] }
 ogg-sys = "*"
 regex = "1"
-thiserror = "1.0"
+thiserror = "2"
 vorbis-sys = "0.1"
 vorbisfile-sys = "*"
 xmlparser = "0.12"
