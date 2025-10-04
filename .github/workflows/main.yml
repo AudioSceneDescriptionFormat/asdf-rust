@@ -236,17 +236,17 @@ jobs:
         # https://github.com/actions/checkout/issues/1169:
         run: git config --system --add safe.directory $GITHUB_WORKSPACE
       - name: Retrieve Linux external
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: Linux Pd external
           path: asdf
       - name: Retrieve macOS external
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: macOS Pd external
           path: asdf
       - name: Retrieve Windows external
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: Windows Pd external
           path: asdf
