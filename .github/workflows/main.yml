@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: true
       - name: Install Rust
@@ -72,7 +72,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: true
       - name: Install Rust
@@ -147,7 +147,7 @@ jobs:
             cargo-c:p
             ntldd-git:p
       - name: Clone Git repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: true
       - name: Run tests
@@ -183,7 +183,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: true
       - name: Install Rust
@@ -228,7 +228,7 @@ jobs:
           apt-get update
           apt-get install --assume-yes --no-install-recommends git
       - name: Clone Git repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           # check out all tags to get proper version in Deken package
           fetch-depth: 0
@@ -266,7 +266,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: true
       - name: Install Rust
@@ -291,7 +291,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone Git repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: true
       - name: Install Rust version ${{ matrix.rust-version }}
