@@ -452,16 +452,18 @@ impl<'a> Element<'a> for SeqElement {
         let mut files = Vec::new();
         let mut transformers = Vec::new();
         for i in 0..self.iterations.get() {
-            files.extend(self.files.iter().cloned().map(|entry| PlaylistEntry {
+            files.extend(self.files.iter().map(|entry| PlaylistEntry {
                 begin: i * self.end + entry.begin,
-                ..entry
+                ..*entry
             }));
-            transformers.extend(self.transformers.iter().cloned().map(|instance| {
-                TransformerInstance {
-                    begin: i * self.end + instance.begin,
-                    ..instance
-                }
-            }));
+            transformers.extend(
+                self.transformers
+                    .iter()
+                    .map(|instance| TransformerInstance {
+                        begin: i * self.end + instance.begin,
+                        ..*instance
+                    }),
+            );
         }
         parent.unwrap().add_files_and_transformers(
             files,
@@ -550,16 +552,18 @@ impl<'a> Element<'a> for ParElement {
         let mut files = Vec::new();
         let mut transformers = Vec::new();
         for i in 0..self.iterations.get() {
-            files.extend(self.files.iter().cloned().map(|entry| PlaylistEntry {
+            files.extend(self.files.iter().map(|entry| PlaylistEntry {
                 begin: i * duration + entry.begin,
-                ..entry
+                ..*entry
             }));
-            transformers.extend(self.transformers.iter().cloned().map(|instance| {
-                TransformerInstance {
-                    begin: i * duration + instance.begin,
-                    ..instance
-                }
-            }));
+            transformers.extend(
+                self.transformers
+                    .iter()
+                    .map(|instance| TransformerInstance {
+                        begin: i * duration + instance.begin,
+                        ..*instance
+                    }),
+            );
         }
         parent.unwrap().add_files_and_transformers(
             files,
@@ -1327,10 +1331,10 @@ impl<'a> Element<'a> for TransformElement {
 
         let mut duplicated_transformers = Vec::new();
         for i in 0..self.iterations.get() {
-            duplicated_transformers.extend(transformers.iter().cloned().map(|instance| {
+            duplicated_transformers.extend(transformers.iter().map(|instance| {
                 TransformerInstance {
                     begin: i * frames + instance.begin,
-                    ..instance
+                    ..*instance
                 }
             }));
         }
